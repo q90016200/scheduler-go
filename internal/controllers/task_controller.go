@@ -36,7 +36,7 @@ func (ctrl *TaskController) ListTasksHandler(c *gin.Context) {
 	logger.Logger.Info("Processing request in SomeHandler, Trace ID: ", traceID)
 
 	// 取得任務清單的邏輯
-	response.Success(c, gin.H{"tasks": tasks, "traceID": traceID}, "成功獲取任務清單")
+	response.Success(c, gin.H{"tasks": tasks}, "成功獲取任務清單")
 }
 
 // CreateTaskHandler 建立任務
