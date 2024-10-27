@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/q90016200/schedule-go/internal/app"
 	"github.com/q90016200/schedule-go/internal/controllers"
+	"github.com/q90016200/schedule-go/internal/middleware"
 )
 
 // SetupRouter 設定所有路由
@@ -17,7 +18,7 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 	//	authRoutes.POST("/register", auth.Register)
 	//}
 
-	taskRoutes := r.Group("/tasks")
+	taskRoutes := r.Group("/tasks").Use(middleware.OpenTracingMiddleware())
 	{
 		taskRoutes.GET("/", taskController.ListTasksHandler)
 		taskRoutes.POST("/", taskController.CreateTaskHandler)

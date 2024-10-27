@@ -18,6 +18,12 @@ func NewTaskController(services *app.AppServices) *TaskController {
 }
 
 func (ctrl *TaskController) ListTasksHandler(c *gin.Context) {
+	// 取得 Trace ID
+	traceID, exists := c.Get("TraceID")
+	if !exists {
+		traceID = "unknown"
+	}
+
 	if !config.AppConfig.TaskEnabled {
 		logger.Logger.Warn("任務系統已停用")
 		c.JSON(http.StatusForbidden, gin.H{"error": "任務系統已停用"})
@@ -27,8 +33,10 @@ func (ctrl *TaskController) ListTasksHandler(c *gin.Context) {
 	tasks := []string{"task1", "task2", "task3"}
 	logger.Logger.Info("成功獲取任務清單")
 
+	logger.Logger.Info("Processing request in SomeHandler, Trace ID: ", traceID)
+
 	// 取得任務清單的邏輯
-	response.Success(c, gin.H{"tasks": tasks}, "成功獲取任務清單")
+	response.Success(c, gin.H{"tasks": tasks, "traceID": traceID}, "成功獲取任務清單")
 }
 
 // CreateTaskHandler 建立任務
