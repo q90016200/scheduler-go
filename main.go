@@ -4,26 +4,24 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/q90016200/schedule-go/config"
 	"github.com/q90016200/schedule-go/internal/app"
+	"github.com/q90016200/schedule-go/internal/database"
 	"github.com/q90016200/schedule-go/internal/router"
 	"github.com/q90016200/schedule-go/pkg/logger"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
 	"log"
 )
 
 func main() {
 	// 載入配置
-	config.LoadConfig()
+	config.LoadConfig(".env")
 
 	// 初始化日誌
 	logger.Init()
 	logger.Logger.Info("日誌初始化完成")
 
 	// 初始化資料庫
-	dsn := config.AppConfig.MySqlConfig.Username + ":" + config.AppConfig.MySqlConfig.Password + "@tcp(" + config.AppConfig.MySqlConfig.Host + ":" + config.AppConfig.MySqlConfig.Port + ")/" + config.AppConfig.MySqlConfig.Database + "?charset=utf8mb4&parseTime=true&loc=Local"
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	db, err := database.InitializeDB()
 	if err != nil {
-		//logger.Logger.Fatalf("資料庫初始化失敗: %v", err)
+		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
 	// 初始化 AppServices

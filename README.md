@@ -1,9 +1,14 @@
 專案資料夾結構 (待調整)
 ```plaintext
 scheduler-tool/
+├── cmd/                  # 命令行工具入口，例如 migrate 或 main
+│   └── migrate/          # 單獨的遷移工具
+│       └── migrate.go
 ├── config/                 # 配置檔案和初始化
 │   └── config.go           # 配置初始化
 ├── internal/               # 私有應用程式邏輯
+│   ├── database/           # 資料庫連線和初始化
+│   │   └── database.go
 │   ├── controllers/        # 控制器層（處理 API 請求）
 │   │   ├── auth.go         # 驗證控制器
 │   │   ├── task.go         # 任務管理控制器

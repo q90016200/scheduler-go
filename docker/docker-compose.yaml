@@ -1,0 +1,76 @@
+version: '3'
+services:
+  # mongo:
+  #   image: mongo:4.2
+  #   restart: always
+  #   container_name: mongo
+  #   ports:
+  #     - "27017:27017"
+  #   volumes:
+  #     - "./db/mongo/data:/data/db"
+  #     - "./db/mongo/config:/data/configdb"
+  #     - "./db/mongo/vhost:/vhost"
+  #   environment :
+  #     - TZ=Asia/Taipei
+  #   # network_mode: "host"
+  #   networks:
+  #     docker_bridge:
+  #       ipv4_address: 172.28.0.3
+  redis:
+    image: redis
+    restart: always
+    container_name: redis
+    ports:
+      - 6379:6379
+    # network_mode: "host"
+    networks:
+      docker_bridge:
+        ipv4_address: 172.28.0.4
+  mysql:
+    image: mysql:8
+    platform: linux/amd64
+#    restart: always
+    container_name: mysql
+    command:
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_general_ci
+      --bind-address=0.0.0.0
+      # --explicit_defaults_for_timestamp=true
+    # --lower_case_table_names=1
+    environment:
+      MYSQL_ROOT_PASSWORD: root  # 设置 root 用户的密码
+      TZ: Asia/Taipei
+      MYSQL_DATABASE: schedule_go # 创建一个名为 schedule_go 的数据库
+    ports:
+      - "3306:3306"
+    volumes:
+      - "./mysql/data:/var/lib/mysql" # 使用卷来持久化数据库数据
+      - "./mysql/conf:/etc/mysql/conf.d"
+    # network_mode: "host"
+    networks:
+      docker_bridge:
+        ipv4_address: 172.28.0.5
+# postgres:
+#   image: postgres:14
+#   restart: always
+#   container_name: postgres
+#   environment:
+#     POSTGRES_DB: postgres
+#     POSTGRES_USER: postgres
+#     POSTGRES_PASSWORD: postgres
+#     PGDATA: /var/lib/postgresql/data
+#   volumes:
+#     - "./db/postgres/data:/var/lib/postgresql/data"
+#   ports:
+#     - "5432:5432"
+#   networks:
+#     docker_bridge:
+#       ipv4_address: 172.28.0.6
+networks:
+  docker_bridge:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
+          gateway: 172.28.0.1

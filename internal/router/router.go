@@ -10,6 +10,7 @@ import (
 // SetupRouter 設定所有路由
 func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 	taskController := controllers.NewTaskController(services)
+	authController := controllers.NewAuthController(services)
 
 	// 用戶驗證路由
 	//authRoutes := r.Group("/auth")
@@ -24,6 +25,12 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 		taskRoutes.POST("/", taskController.CreateTaskHandler)
 		taskRoutes.PUT("/:id", taskController.UpdateTaskHandler)
 		taskRoutes.DELETE("/:id", taskController.DeleteTaskHandler)
+	}
+
+	authRoutes := r.Group("/auth").Use(middleware.OpenTracingMiddleware())
+	{
+		authRoutes.POST("/register", authController.RegisterHandler)
+		authRoutes.POST("/login", authController.LoginHandler)
 	}
 
 	return r
