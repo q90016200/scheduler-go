@@ -31,6 +31,7 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 	{
 		authRoutes.POST("/register", authController.RegisterHandler)
 		authRoutes.POST("/login", authController.LoginHandler)
+		authRoutes.POST("/logout", authController.LogoutHandler).Use(middleware.JWTAuthMiddleware())
 	}
 
 	return r

@@ -73,3 +73,11 @@ func (ctrl *AuthController) LoginHandler(c *gin.Context) {
 	}, "登入成功")
 	return
 }
+
+func (ctrl *AuthController) LogoutHandler(c *gin.Context) {
+	// 删除 auth_token Cookie
+	c.SetCookie("auth_token", "", -1, "/", "localhost", false, true)
+
+	response.Success(c, gin.H{}, "登出成功")
+	return
+}
