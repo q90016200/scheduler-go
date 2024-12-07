@@ -29,6 +29,8 @@ func Success(c *gin.Context, data interface{}, message string) {
 		Error:   nil,
 		Trace:   traceID,
 	})
+
+	return
 }
 
 // Fail 回傳失敗的回應
@@ -39,11 +41,13 @@ func Fail(c *gin.Context, code int, errMessage string, errDetail interface{}) {
 		traceID = "unknown"
 	}
 
-	c.JSON(code, Response{
+	c.AbortWithStatusJSON(code, Response{
 		Code:    code,
 		Message: errMessage,
 		Data:    nil,
 		Error:   errDetail,
 		Trace:   traceID,
 	})
+
+	return
 }

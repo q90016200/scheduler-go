@@ -8,11 +8,12 @@ import (
 
 // Config 定義應用程式配置
 type Config struct {
-	ServerPort  string
-	AppSecret   string
-	TaskEnabled bool
-	MySqlConfig MysqlConfig
-	TokenExpiry time.Duration
+	ServerPort   string
+	ServerDomain string
+	AppSecret    string
+	TaskEnabled  bool
+	MySqlConfig  MysqlConfig
+	TokenExpiry  time.Duration
 }
 
 // MysqlConfig MySql 配置
@@ -37,10 +38,11 @@ func LoadConfig(filePath string) {
 	}
 
 	AppConfig = Config{
-		ServerPort:  viper.GetString("SERVER_PORT"),
-		TaskEnabled: viper.GetBool("TASK_ENABLED"),
-		AppSecret:   viper.GetString("APP_SECRET"),
-		TokenExpiry: viper.GetDuration("TOKEN_EXPIRY"),
+		ServerPort:   viper.GetString("SERVER_PORT"),
+		ServerDomain: viper.GetString("SERVER_DOMAIN"),
+		TaskEnabled:  viper.GetBool("TASK_ENABLED"),
+		AppSecret:    viper.GetString("APP_SECRET"),
+		TokenExpiry:  viper.GetDuration("TOKEN_EXPIRY"),
 		MySqlConfig: MysqlConfig{
 			Username: viper.GetString("MYSQL_USER"),
 			Password: viper.GetString("MYSQL_PASSWORD"),

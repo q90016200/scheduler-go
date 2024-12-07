@@ -27,7 +27,6 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 		claims, err := auth.ParseToken(tokenString)
 		if err != nil {
 			response.Fail(c, http.StatusUnauthorized, "無效或過期的 Token", nil)
-			c.Abort()
 			return
 		}
 

@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"errors"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/q90016200/schedule-go/config"
 	"github.com/q90016200/schedule-go/internal/app"
@@ -66,7 +67,7 @@ func (ctrl *AuthController) LoginHandler(c *gin.Context) {
 	}
 
 	// 设置 HttpOnly cookie
-	c.SetCookie("auth_token", token, int(config.AppConfig.TokenExpiry*time.Second), "/", "localhost", false, true) // `true` 表示 HttpOnly
+	c.SetCookie("auth_token", token, int(config.AppConfig.TokenExpiry*time.Second), "/", config.AppConfig.ServerDomain, false, true) // `true` 表示 HttpOnly
 
 	response.Success(c, gin.H{
 		"token": token,
@@ -75,8 +76,9 @@ func (ctrl *AuthController) LoginHandler(c *gin.Context) {
 }
 
 func (ctrl *AuthController) LogoutHandler(c *gin.Context) {
+	fmt.Println("123")
 	// 删除 auth_token Cookie
-	c.SetCookie("auth_token", "", -1, "/", "localhost", false, true)
+	c.SetCookie("auth_token", "", -1, "/", config.AppConfig.ServerDomain, false, true)
 
 	response.Success(c, gin.H{}, "登出成功")
 	return

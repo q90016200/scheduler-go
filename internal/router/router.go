@@ -12,13 +12,6 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 	taskController := controllers.NewTaskController(services)
 	authController := controllers.NewAuthController(services)
 
-	// 用戶驗證路由
-	//authRoutes := r.Group("/auth")
-	//{
-	//	authRoutes.POST("/login", auth.Login)
-	//	authRoutes.POST("/register", auth.Register)
-	//}
-
 	taskRoutes := r.Group("/tasks").Use(middleware.OpenTracingMiddleware())
 	{
 		taskRoutes.GET("/", taskController.ListTasksHandler)
@@ -27,11 +20,12 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 		taskRoutes.DELETE("/:id", taskController.DeleteTaskHandler)
 	}
 
+	// 用戶驗證路由
 	authRoutes := r.Group("/auth").Use(middleware.OpenTracingMiddleware())
 	{
 		authRoutes.POST("/register", authController.RegisterHandler)
 		authRoutes.POST("/login", authController.LoginHandler)
-		authRoutes.POST("/logout", authController.LogoutHandler).Use(middleware.JWTAuthMiddleware())
+		authRoutes.POST("/logout", middleware.JWTAuthMiddleware(), authController.LogoutHandler)
 	}
 
 	return r

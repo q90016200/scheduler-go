@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func RandCreator(l int) string {
+func RandString(l int) string {
 	str := "0123456789abcdefghigklmnopqrstuvwxyz"
 	strList := []byte(str)
 
