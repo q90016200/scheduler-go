@@ -15,9 +15,9 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 	taskRoutes := r.Group("/tasks").Use(middleware.OpenTracingMiddleware())
 	{
 		taskRoutes.GET("/", taskController.ListTasksHandler)
-		taskRoutes.POST("/", taskController.CreateTaskHandler)
-		taskRoutes.PUT("/:id", taskController.UpdateTaskHandler)
-		taskRoutes.DELETE("/:id", taskController.DeleteTaskHandler)
+		taskRoutes.POST("/", middleware.JWTAuthMiddleware(), taskController.CreateTaskHandler)
+		taskRoutes.PUT("/:id", middleware.JWTAuthMiddleware(), taskController.UpdateTaskHandler)
+		taskRoutes.DELETE("/:id", middleware.JWTAuthMiddleware(), taskController.DeleteTaskHandler)
 	}
 
 	// 用戶驗證路由

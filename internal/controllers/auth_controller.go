@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"errors"
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/q90016200/schedule-go/config"
 	"github.com/q90016200/schedule-go/internal/app"
@@ -76,7 +75,6 @@ func (ctrl *AuthController) LoginHandler(c *gin.Context) {
 }
 
 func (ctrl *AuthController) LogoutHandler(c *gin.Context) {
-	fmt.Println("123")
 	// 删除 auth_token Cookie
 	c.SetCookie("auth_token", "", -1, "/", config.AppConfig.ServerDomain, false, true)
 

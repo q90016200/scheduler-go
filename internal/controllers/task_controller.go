@@ -4,8 +4,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/q90016200/schedule-go/config"
 	"github.com/q90016200/schedule-go/internal/app"
+	"github.com/q90016200/schedule-go/internal/models"
 	"github.com/q90016200/schedule-go/pkg/logger"
 	"github.com/q90016200/schedule-go/pkg/response"
+	"github.com/q90016200/schedule-go/pkg/utils"
 	"net/http"
 )
 
@@ -41,8 +43,20 @@ func (ctrl *TaskController) ListTasksHandler(c *gin.Context) {
 
 // CreateTaskHandler 建立任務
 func (ctrl *TaskController) CreateTaskHandler(c *gin.Context) {
-	// 建立任務的邏輯
-	c.JSON(http.StatusCreated, gin.H{"task": "任務已建立"})
+	// 解析並綁定請求數據到 Task 結構體
+	var task models.Task
+	if err := c.ShouldBindJSON(&task); err != nil {
+		// 解析 JSON 時的錯誤
+		response.Fail(c, http.StatusBadRequest, err.Error(), nil)
+		return
+	}
+
+	if err := utils.MyValidator.Struct(task); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error(), nil)
+		return
+	}
+	response.Success(c, nil, "任務已建立")
+	return
 }
 
 // UpdateTaskHandler 更新任務

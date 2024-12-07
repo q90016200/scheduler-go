@@ -9,15 +9,15 @@ import (
 type Response struct {
 	Code    int         `json:"code"`
 	Message string      `json:"message"`
-	Data    interface{} `json:"data"`
-	Error   interface{} `json:"error"`
+	Data    interface{} `json:"data,omitempty"`
+	Error   interface{} `json:"error,omitempty"`
 	Trace   any         `json:"trace"`
 }
 
 // Success 回傳成功的回應
 func Success(c *gin.Context, data interface{}, message string) {
 	// 取得 Trace ID
-	traceID, exists := c.Get("TraceID")
+	traceID, exists := c.Get("trace_id")
 	if !exists {
 		traceID = "unknown"
 	}
@@ -36,7 +36,7 @@ func Success(c *gin.Context, data interface{}, message string) {
 // Fail 回傳失敗的回應
 func Fail(c *gin.Context, code int, errMessage string, errDetail interface{}) {
 	// 取得 Trace ID
-	traceID, exists := c.Get("TraceID")
+	traceID, exists := c.Get("trace_id")
 	if !exists {
 		traceID = "unknown"
 	}
