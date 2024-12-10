@@ -22,5 +22,16 @@ func NewTaskRepository(db *gorm.DB) TaskRepository {
 
 // Create 建立一個新的 Task
 func (r *taskRepository) Create(task *models.Task) error {
+	// 預設寫入時間，已在 gorm tag 自動寫入
+	//task.CreatedAt = time.Now().Unix()
+	//task.UpdatedAt = time.Now().Unix()
 	return r.db.Create(task).Error
+}
+
+func (r *taskRepository) Update(task *models.Task) error {
+	return r.db.Save(task).Error
+}
+
+func (r *taskRepository) Delete(id uint) error {
+	return r.db.Where("id = ?", id).Delete(&models.Task{}).Error
 }

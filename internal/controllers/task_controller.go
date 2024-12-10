@@ -43,19 +43,31 @@ func (ctrl *TaskController) ListTasksHandler(c *gin.Context) {
 
 // CreateTaskHandler 建立任務
 func (ctrl *TaskController) CreateTaskHandler(c *gin.Context) {
-	// 解析並綁定請求數據到 Task 結構體
-	var task models.Task
-	if err := c.ShouldBindJSON(&task); err != nil {
+	// 解析並綁定請求數據到 CreateTaskReq 結構體
+	var req models.CreateTaskReq
+	if err := c.ShouldBindJSON(&req); err != nil {
 		// 解析 JSON 時的錯誤
 		response.Fail(c, http.StatusBadRequest, err.Error(), nil)
 		return
 	}
 
-	if err := utils.MyValidator.Struct(task); err != nil {
+	if err := utils.MyValidator.Struct(req); err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error(), nil)
 		return
 	}
-	response.Success(c, nil, "任務已建立")
+
+	// 當請求參數 status 未傳入時，預設為不啟動
+	if req.Status == "" {
+		req.Status = models.TASK_STATUS_INACTIVE
+	}
+
+	task, err := ctrl.services.TaskServices.CreateTask(req)
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, "建立任務失敗", err.Error())
+		return
+	}
+
+	response.Success(c, task, "任務已建立")
 	return
 }
 

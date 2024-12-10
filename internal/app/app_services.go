@@ -8,7 +8,7 @@ import (
 )
 
 type AppServices struct {
-	EnabledTasks sync.Map // 共享變數存放所有可啟用的任務
+	EnabledTasks *sync.Map // 共享變數存放所有可啟用的任務
 	// Service
 	TaskServices *services.TaskService
 	AuthService  *services.AuthService
@@ -17,7 +17,7 @@ type AppServices struct {
 func NewAppServices(db *gorm.DB) *AppServices {
 	repoManager := repositories.NewRepositoryManager(db)
 	return &AppServices{
-		EnabledTasks: sync.Map{}, // 初始化共享變數
+		EnabledTasks: &sync.Map{}, // 初始化共享變數
 		TaskServices: services.NewTaskService(repoManager),
 		AuthService:  services.NewAuthService(repoManager),
 	}
