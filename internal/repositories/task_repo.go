@@ -9,6 +9,8 @@ import (
 type TaskRepository interface {
 	// Create 這個函式需要接收兩個參數（string, int），並回傳 (string, error) 才符合入會資格
 	Create(task *models.Task) error
+	Update(task *models.Task) error
+	Delete(id string) error
 }
 
 type taskRepository struct {
@@ -32,6 +34,6 @@ func (r *taskRepository) Update(task *models.Task) error {
 	return r.db.Save(task).Error
 }
 
-func (r *taskRepository) Delete(id uint) error {
+func (r *taskRepository) Delete(id string) error {
 	return r.db.Where("id = ?", id).Delete(&models.Task{}).Error
 }

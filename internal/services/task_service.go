@@ -1,8 +1,11 @@
 package services
 
 import (
+	"fmt"
 	"github.com/q90016200/schedule-go/internal/models"
 	"github.com/q90016200/schedule-go/internal/repositories"
+	"github.com/q90016200/schedule-go/pkg/logger"
+	"github.com/rs/xid"
 	"sync"
 )
 
@@ -19,7 +22,9 @@ func NewTaskService(enableTasks *sync.Map, repo *repositories.RepositoryManager)
 }
 
 func (s TaskService) CreateTask(input models.CreateTaskReq) (*models.Task, error) {
+	guid := xid.New()
 	task := &models.Task{
+		ID:          guid.String(),
 		GroupID:     input.GroupID,
 		Name:        input.Name,
 		Description: input.Description,
@@ -48,19 +53,64 @@ func (s TaskService) CreateTask(input models.CreateTaskReq) (*models.Task, error
 	return task, nil
 }
 
-func (s *TaskService) UpdateTask() (*models.Task, error) {
-	return nil, nil
+func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models.Task, error) {
+	task := &models.Task{
+		ID:          id,
+		GroupID:     input.GroupID,
+		Name:        input.Name,
+		Description: input.Description,
+		Schedule:    input.Schedule,
+		Type:        input.Type,
+		Endpoint:    input.EndPoint,
+		Method:      input.Method,
+		Payload:     input.Payload,
+		Status:      input.Status,
+		CreatedBy:   input.UserId,
+		UpdatedBy:   input.UserId,
+	}
+
+	if err := s.repo.TaskRepo.Update(task); err != nil {
+		errMsg := fmt.Sprintf("task: %T, repo.TaskRepo.Update err: %v", task, err)
+		logger.Logger.Error(errMsg)
+		return nil, err
+	}
+
+	// 重新啟動排程任務
+	if err := s.DeleteCronTask(id); err != nil {
+		errMsg := fmt.Sprintf("task: %T, DeleteCronTask err: %v", task, err)
+		logger.Logger.Error(errMsg)
+		return nil, err
+	}
+	if err := s.CreateCronTask(id, task); err != nil {
+		errMsg := fmt.Sprintf("task: %T, CreateCronTask err: %v", task, err)
+		logger.Logger.Error(errMsg)
+		return nil, err
+	}
+
+	return task, nil
 }
 
-func (s *TaskService) DeleteTask(id uint) error {
+func (s *TaskService) DeleteTask(id string) error {
+	if err := s.repo.TaskRepo.Delete(id); err != nil {
+		errMsg := fmt.Sprintf("task id: %s, repo.TaskRepo.Delete err: %v", id, err)
+		logger.Logger.Error(errMsg)
+		return err
+	}
+
+	if err := s.DeleteCronTask(id); err != nil {
+		errMsg := fmt.Sprintf("task id: %s, DeleteCronTask err: %v", id, err)
+		logger.Logger.Error(errMsg)
+		return err
+	}
+
 	return nil
 }
 
-func (s *TaskService) CreateCronTask(id uint, task *models.Task) error {
+func (s *TaskService) CreateCronTask(id string, task *models.Task) error {
 	//s.enableTasks.Store(task.ID, task)
 	return nil
 }
 
-func (s TaskService) DeleteCronTask(id uint) error {
+func (s TaskService) DeleteCronTask(id string) error {
 	return nil
 }

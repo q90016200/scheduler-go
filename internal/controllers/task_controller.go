@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/q90016200/schedule-go/config"
 	"github.com/q90016200/schedule-go/internal/app"
 	"github.com/q90016200/schedule-go/internal/models"
 	"github.com/q90016200/schedule-go/pkg/logger"
@@ -26,11 +25,11 @@ func (ctrl *TaskController) ListTasksHandler(c *gin.Context) {
 		traceID = "unknown"
 	}
 
-	if !config.AppConfig.TaskEnabled {
-		logger.Logger.Warn("任務系統已停用")
-		c.JSON(http.StatusForbidden, gin.H{"error": "任務系統已停用"})
-		return
-	}
+	//if !config.AppConfig.TaskEnabled {
+	//	logger.Logger.Warn("任務系統已停用")
+	//	c.JSON(http.StatusForbidden, gin.H{"error": "任務系統已停用"})
+	//	return
+	//}
 
 	tasks := []string{"task1", "task2", "task3"}
 	logger.Logger.Info("成功獲取任務清單")
@@ -73,12 +72,44 @@ func (ctrl *TaskController) CreateTaskHandler(c *gin.Context) {
 
 // UpdateTaskHandler 更新任務
 func (ctrl *TaskController) UpdateTaskHandler(c *gin.Context) {
-	// 更新指定任務的邏輯
-	c.JSON(http.StatusOK, gin.H{"task": "任務已更新"})
+	id := c.DefaultQuery("id", "")
+	if id == "" {
+		response.Fail(c, http.StatusBadRequest, "id is empty", nil)
+		return
+	}
+
+	var req models.UpdateTaskReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// 解析 JSON 時的錯誤
+		response.Fail(c, http.StatusBadRequest, err.Error(), nil)
+		return
+	}
+
+	if err := utils.MyValidator.Struct(req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error(), nil)
+		return
+	}
+
+	task, err := ctrl.services.TaskServices.UpdateTask(id, req)
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, "更新任務失敗", err.Error())
+	}
+
+	response.Success(c, task, "任務已更新")
+	//c.JSON(http.StatusOK, gin.H{"task": "任務已更新"})
 }
 
 // DeleteTaskHandler 刪除任務
 func (ctrl *TaskController) DeleteTaskHandler(c *gin.Context) {
-	// 刪除指定任務的邏輯
-	c.JSON(http.StatusOK, gin.H{"message": "任務已刪除"})
+	id := c.DefaultQuery("id", "")
+	if id == "" {
+		response.Fail(c, http.StatusBadRequest, "id is empty", nil)
+		return
+	}
+
+	if err := ctrl.services.TaskServices.DeleteTask(id); err != nil {
+		response.Fail(c, http.StatusInternalServerError, "刪除任務失敗", err.Error())
+	}
+	response.Success(c, nil, "任務已刪除")
+	//c.JSON(http.StatusOK, gin.H{"message": "任務已刪除"})
 }

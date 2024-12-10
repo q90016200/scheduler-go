@@ -22,7 +22,7 @@ func Success(c *gin.Context, data interface{}, message string) {
 		traceID = "unknown"
 	}
 
-	c.JSON(http.StatusOK, Response{
+	c.AbortWithStatusJSON(http.StatusOK, Response{
 		Code:    http.StatusOK,
 		Message: message,
 		Data:    data,

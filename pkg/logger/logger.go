@@ -31,3 +31,29 @@ func WithTrace(c *gin.Context) *logrus.Entry {
 	// 返回包含 trace_id 的 Logrus Entry
 	return Logger.WithField("trace_id", traceID)
 }
+
+// LogrusAdapter 是一個適配 logrus 的 cron.Logger 實現
+type LogrusAdapter struct {
+	Logger *logrus.Logger
+}
+
+// Info 實現 Info 日志
+func (l *LogrusAdapter) Info(msg string, keysAndValues ...interface{}) {
+	l.Logger.WithFields(convertFields(keysAndValues...)).Info(msg)
+}
+
+// Error 實現 Error 日志
+func (l *LogrusAdapter) Error(err error, msg string, keysAndValues ...interface{}) {
+	l.Logger.WithFields(convertFields(keysAndValues...)).WithError(err).Error(msg)
+}
+
+// convertFields 將鍵值對轉換為 logrus.Fields
+func convertFields(keysAndValues ...interface{}) logrus.Fields {
+	fields := logrus.Fields{}
+	for i := 0; i < len(keysAndValues)-1; i += 2 {
+		if key, ok := keysAndValues[i].(string); ok {
+			fields[key] = keysAndValues[i+1]
+		}
+	}
+	return fields
+}
