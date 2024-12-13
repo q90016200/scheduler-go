@@ -7,7 +7,7 @@ import (
 
 // TaskRepository 任何型別，只要符合定義規則的話，就可以被納入 TaskRepository interface
 type TaskRepository interface {
-	// Create 這個函式需要接收兩個參數（string, int），並回傳 (string, error) 才符合入會資格
+	ListTasks(filters map[string]interface{}, sortField string, sortOrder string) ([]models.Task, error)
 	Create(task *models.Task) error
 	Update(task *models.Task) error
 	Delete(id string) error
@@ -20,6 +20,29 @@ type taskRepository struct {
 // NewTaskRepository 建立 TaskRepository 實例
 func NewTaskRepository(db *gorm.DB) TaskRepository {
 	return &taskRepository{db: db}
+}
+
+func (r *taskRepository) ListTasks(filters map[string]interface{}, sortField string, sortOrder string) ([]models.Task, error) {
+	var tasks []models.Task
+	query := r.db
+
+	// 篩選條件
+	if status, ok := filters["status"]; ok {
+		query = query.Where("status = ?", status)
+	}
+
+	// 排序條件
+	if sortField != "" {
+		order := "ASC"
+		if sortOrder == "desc" {
+			order = "DESC"
+		}
+		query = query.Order(sortField + " " + order)
+	}
+
+	// 查詢結果
+	err := query.Find(&tasks).Error
+	return tasks, err
 }
 
 // Create 建立一個新的 Task

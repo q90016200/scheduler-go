@@ -18,7 +18,7 @@ func StartScheduler() {
 
 	// 建立每分鐘檢查任務狀態任務
 	_, err := Scheduler.AddFunc("@every 1m", func() {
-
+		
 	})
 	if err != nil {
 		logger.Logger.WithError(err).Error("Failed to schedule cleanup task")

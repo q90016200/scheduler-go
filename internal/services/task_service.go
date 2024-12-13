@@ -21,7 +21,12 @@ func NewTaskService(enableTasks *sync.Map, repo *repositories.RepositoryManager)
 	}
 }
 
-func (s TaskService) CreateTask(input models.CreateTaskReq) (*models.Task, error) {
+// ListTasks 支持篩選與排序
+func (s *TaskService) ListTasks(filters map[string]interface{}, sortField, sortOrder string) ([]models.Task, error) {
+	return s.repo.TaskRepo.ListTasks(filters, sortField, sortOrder)
+}
+
+func (s *TaskService) CreateTask(input models.CreateTaskReq) (*models.Task, error) {
 	guid := xid.New()
 	task := &models.Task{
 		ID:          guid.String(),

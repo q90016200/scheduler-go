@@ -4,7 +4,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/q90016200/schedule-go/internal/app"
 	"github.com/q90016200/schedule-go/internal/models"
-	"github.com/q90016200/schedule-go/pkg/logger"
 	"github.com/q90016200/schedule-go/pkg/response"
 	"github.com/q90016200/schedule-go/pkg/utils"
 	"net/http"
@@ -19,22 +18,29 @@ func NewTaskController(services *app.AppServices) *TaskController {
 }
 
 func (ctrl *TaskController) ListTasksHandler(c *gin.Context) {
-	// 取得 Trace ID
-	traceID, exists := c.Get("TraceID")
-	if !exists {
-		traceID = "unknown"
-	}
-
 	//if !config.AppConfig.TaskEnabled {
 	//	logger.Logger.Warn("任務系統已停用")
 	//	c.JSON(http.StatusForbidden, gin.H{"error": "任務系統已停用"})
 	//	return
 	//}
 
-	tasks := []string{"task1", "task2", "task3"}
-	logger.Logger.Info("成功獲取任務清單")
+	// 提取查詢參數
+	status := c.Query("status") // 篩選條件：status
 
-	logger.Logger.Info("Processing request in SomeHandler, Trace ID: ", traceID)
+	sortField := c.Query("sort_field") // 排序字段
+	sortOrder := c.Query("sort_order") // 排序方式（asc 或 desc）
+
+	// 設置篩選條件
+	filters := map[string]interface{}{}
+	if status != "" {
+		filters["status"] = status
+	}
+
+	// 調用 Service
+	tasks, err := ctrl.services.TaskServices.ListTasks(filters, sortField, sortOrder)
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, "", nil)
+	}
 
 	// 取得任務清單的邏輯
 	response.Success(c, gin.H{"tasks": tasks}, "成功獲取任務清單")
