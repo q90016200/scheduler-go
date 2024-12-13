@@ -1,6 +1,9 @@
 package schedule
 
 import (
+	"fmt"
+	"github.com/q90016200/schedule-go/internal/app"
+	"github.com/q90016200/schedule-go/internal/models"
 	"github.com/q90016200/schedule-go/pkg/logger"
 	"github.com/robfig/cron/v3"
 )
@@ -9,7 +12,7 @@ import (
 var Scheduler *cron.Cron
 
 // StartScheduler 啟動排程器並註冊所有任務
-func StartScheduler() {
+func StartScheduler(service *app.AppServices) {
 	log := logger.Logger
 	cronLogger := &logger.LogrusAdapter{Logger: log}
 
@@ -18,7 +21,20 @@ func StartScheduler() {
 
 	// 建立每分鐘檢查任務狀態任務
 	_, err := Scheduler.AddFunc("@every 1m", func() {
-		
+		tasks, err := service.TaskServices.ListTasks(map[string]interface{}{
+			"status": models.TASK_STATUS_ACTIVE,
+		}, "created_at", "ASC")
+		if err != nil {
+			errMsg := fmt.Sprintf("TaskServices.ListTasks err: %v", err)
+			log.Error(errMsg)
+			return
+		}
+		for _, task := range tasks {
+			switch task.Type {
+			case "http":
+				
+			}
+		}
 	})
 	if err != nil {
 		logger.Logger.WithError(err).Error("Failed to schedule cleanup task")

@@ -16,9 +16,10 @@ type AppServices struct {
 
 func NewAppServices(db *gorm.DB) *AppServices {
 	repoManager := repositories.NewRepositoryManager(db)
+	enableTasks := new(sync.Map)
 	return &AppServices{
-		EnabledTasks: &sync.Map{}, // 初始化共享變數
-		TaskServices: services.NewTaskService(repoManager),
+		EnabledTasks: enableTasks, // 初始化共享變數
+		TaskServices: services.NewTaskService(enableTasks, repoManager),
 		AuthService:  services.NewAuthService(repoManager),
 	}
 }
