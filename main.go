@@ -2,11 +2,11 @@ package main
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/q90016200/schedule-go/config"
-	"github.com/q90016200/schedule-go/internal/app"
-	"github.com/q90016200/schedule-go/internal/database"
-	"github.com/q90016200/schedule-go/internal/router"
-	"github.com/q90016200/schedule-go/pkg/logger"
+	"github.com/q90016200/scheduler-go/config"
+	"github.com/q90016200/scheduler-go/internal/app"
+	"github.com/q90016200/scheduler-go/internal/database"
+	"github.com/q90016200/scheduler-go/internal/router"
+	"github.com/q90016200/scheduler-go/pkg/logger"
 	"log"
 )
 
@@ -37,4 +37,14 @@ func main() {
 	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("服務啟動失敗: %v", err)
 	}
+
+	// 啟動排程器
+	//scheduler.StartScheduler(services)
+	//defer scheduler.StopScheduler()
+	//
+	//// 等待信號以安全退出
+	//quit := make(chan os.Signal, 1)
+	//signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	//<-quit
+	//log.Println("服務關閉中...")
 }

@@ -2,9 +2,9 @@ package services
 
 import (
 	"fmt"
-	"github.com/q90016200/schedule-go/internal/models"
-	"github.com/q90016200/schedule-go/internal/repositories"
-	"github.com/q90016200/schedule-go/pkg/logger"
+	"github.com/q90016200/scheduler-go/internal/models"
+	"github.com/q90016200/scheduler-go/internal/repositories"
+	"github.com/q90016200/scheduler-go/pkg/logger"
 	"github.com/rs/xid"
 	"sync"
 )

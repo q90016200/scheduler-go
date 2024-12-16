@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/q90016200/schedule-go/config"
-	"github.com/q90016200/schedule-go/internal/database"
-	"github.com/q90016200/schedule-go/internal/models"
+	"github.com/q90016200/scheduler-go/config"
+	"github.com/q90016200/scheduler-go/internal/database"
+	"github.com/q90016200/scheduler-go/internal/models"
 	"log"
 )
 

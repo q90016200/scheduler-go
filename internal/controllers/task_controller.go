@@ -2,10 +2,10 @@ package controllers
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/q90016200/schedule-go/internal/app"
-	"github.com/q90016200/schedule-go/internal/models"
-	"github.com/q90016200/schedule-go/pkg/response"
-	"github.com/q90016200/schedule-go/pkg/utils"
+	"github.com/q90016200/scheduler-go/internal/app"
+	"github.com/q90016200/scheduler-go/internal/models"
+	"github.com/q90016200/scheduler-go/pkg/response"
+	"github.com/q90016200/scheduler-go/pkg/utils"
 	"net/http"
 )
 

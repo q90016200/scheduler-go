@@ -1,10 +1,10 @@
-package schedule
+package scheduler
 
 import (
 	"fmt"
-	"github.com/q90016200/schedule-go/internal/app"
-	"github.com/q90016200/schedule-go/internal/models"
-	"github.com/q90016200/schedule-go/pkg/logger"
+	"github.com/q90016200/scheduler-go/internal/app"
+	"github.com/q90016200/scheduler-go/internal/models"
+	"github.com/q90016200/scheduler-go/pkg/logger"
 	"github.com/robfig/cron/v3"
 )
 
@@ -32,16 +32,15 @@ func StartScheduler(service *app.AppServices) {
 		for _, task := range tasks {
 			switch task.Type {
 			case "http":
-				
+
 			}
 		}
 	})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to schedule cleanup task")
+		logger.Logger.WithError(err).Error("Failed to scheduler cleanup task")
 	}
 
 	Scheduler.Start()
-
 }
 
 // StopScheduler 停止排程器

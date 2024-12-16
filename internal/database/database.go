@@ -1,7 +1,7 @@
 package database
 
 import (
-	"github.com/q90016200/schedule-go/config"
+	"github.com/q90016200/scheduler-go/config"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"log"

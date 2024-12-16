@@ -2,8 +2,8 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/q90016200/schedule-go/pkg/logger"
-	"github.com/q90016200/schedule-go/pkg/utils"
+	"github.com/q90016200/scheduler-go/pkg/logger"
+	"github.com/q90016200/scheduler-go/pkg/utils"
 	"github.com/rs/xid"
 	"github.com/sirupsen/logrus"
 )

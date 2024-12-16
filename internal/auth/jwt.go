@@ -2,7 +2,7 @@ package auth
 
 import (
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/q90016200/schedule-go/config"
+	"github.com/q90016200/scheduler-go/config"
 	"time"
 )
 

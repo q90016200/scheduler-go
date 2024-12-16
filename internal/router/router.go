@@ -2,9 +2,9 @@ package router
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/q90016200/schedule-go/internal/app"
-	"github.com/q90016200/schedule-go/internal/controllers"
-	"github.com/q90016200/schedule-go/internal/middleware"
+	"github.com/q90016200/scheduler-go/internal/app"
+	"github.com/q90016200/scheduler-go/internal/controllers"
+	"github.com/q90016200/scheduler-go/internal/middleware"
 )
 
 // SetupRouter 設定所有路由

@@ -1,7 +1,7 @@
 package repositories
 
 import (
-	"github.com/q90016200/schedule-go/internal/models"
+	"github.com/q90016200/scheduler-go/internal/models"
 	"gorm.io/gorm"
 )
 

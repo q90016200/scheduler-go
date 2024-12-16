@@ -2,8 +2,8 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/q90016200/schedule-go/internal/auth"
-	"github.com/q90016200/schedule-go/pkg/response"
+	"github.com/q90016200/scheduler-go/internal/auth"
+	"github.com/q90016200/scheduler-go/pkg/response"
 	"net/http"
 )
 

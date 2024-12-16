@@ -1,4 +1,4 @@
-module github.com/q90016200/schedule-go
+module github.com/q90016200/scheduler-go
 
 go 1.23.2
 

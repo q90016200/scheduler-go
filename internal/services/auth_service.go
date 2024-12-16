@@ -1,8 +1,8 @@
 package services
 
 import (
-	"github.com/q90016200/schedule-go/internal/models"
-	"github.com/q90016200/schedule-go/internal/repositories"
+	"github.com/q90016200/scheduler-go/internal/models"
+	"github.com/q90016200/scheduler-go/internal/repositories"
 	"github.com/rs/xid"
 	"golang.org/x/crypto/bcrypt"
 	"time"
