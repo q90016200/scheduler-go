@@ -6,33 +6,49 @@ import (
 	"github.com/q90016200/scheduler-go/internal/models"
 	"github.com/q90016200/scheduler-go/pkg/logger"
 	"github.com/robfig/cron/v3"
+	"sync"
 )
 
-// Scheduler 全局的排程器實例
-var Scheduler *cron.Cron
+// CronScheduler 全局的排程器實例
+type CronScheduler struct {
+	Cron   *cron.Cron
+	Log    *logger.LogrusAdapter
+	jobIDs map[string]cron.EntryID // 任務名稱與 EntryID 的映射
+	mu     sync.Mutex              // 保證多協程安全
+}
 
-// StartScheduler 啟動排程器並註冊所有任務
-func StartScheduler(service *app.AppServices) {
+func NewCronScheduler() *CronScheduler {
 	log := logger.Logger
 	cronLogger := &logger.LogrusAdapter{Logger: log}
+	return &CronScheduler{
+		Cron:   cron.New(cron.WithChain(cron.SkipIfStillRunning(cronLogger))),
+		Log:    cronLogger,
+		jobIDs: make(map[string]cron.EntryID),
+	}
+}
 
-	//Scheduler = cron.New(cron.WithSeconds()) // 支援秒級調度
-	Scheduler = cron.New(cron.WithChain(cron.SkipIfStillRunning(cronLogger)))
-
+// StartScheduler 啟動排程器並註冊所有任務
+func (cs *CronScheduler) StartScheduler(service *app.AppServices) {
 	// 建立每分鐘檢查任務狀態任務
-	_, err := Scheduler.AddFunc("@every 1m", func() {
+	_, err := cs.Cron.AddFunc("@every 1m", func() {
 		tasks, err := service.TaskServices.ListTasks(map[string]interface{}{
 			"status": models.TASK_STATUS_ACTIVE,
 		}, "created_at", "ASC")
 		if err != nil {
 			errMsg := fmt.Sprintf("TaskServices.ListTasks err: %v", err)
-			log.Error(errMsg)
+			cs.Log.Error(nil, errMsg)
 			return
 		}
 		for _, task := range tasks {
-			switch task.Type {
-			case "http":
+			_, exists := cs.jobIDs[task.ID]
+			if task.Status == models.TASK_STATUS_ACTIVE {
+				if !exists {
+					cs.AddJob(task.ID, &task)
+				}
+			} else {
+				if exists {
 
+				}
 			}
 		}
 	})
@@ -40,13 +56,13 @@ func StartScheduler(service *app.AppServices) {
 		logger.Logger.WithError(err).Error("Failed to scheduler cleanup task")
 	}
 
-	Scheduler.Start()
+	cs.Cron.Start()
 }
 
-// StopScheduler 停止排程器
-func StopScheduler() {
-	if Scheduler != nil {
-		Scheduler.Stop()
+// StopCronScheduler 停止排程器
+func (cs *CronScheduler) StopCronScheduler() {
+	if cs.Cron != nil {
+		cs.Cron.Stop()
 		logger.Logger.Info("排程器已停止")
 	}
 }
