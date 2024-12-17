@@ -6,6 +6,7 @@ import (
 	"github.com/q90016200/scheduler-go/internal/app"
 	"github.com/q90016200/scheduler-go/internal/database"
 	"github.com/q90016200/scheduler-go/internal/router"
+	"github.com/q90016200/scheduler-go/internal/scheduler"
 	"github.com/q90016200/scheduler-go/pkg/logger"
 	"log"
 )
@@ -24,8 +25,11 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
+	// 初始化排程器
+	cronScheduler := scheduler.NewCronScheduler(db)
+
 	// 初始化 AppServices
-	services := app.NewAppServices(db)
+	services := app.NewAppServices(db, cronScheduler)
 
 	// 初始化 Gin 引擎 & 註冊路由
 	r := gin.Default()

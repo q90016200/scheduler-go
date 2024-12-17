@@ -4,7 +4,7 @@ import (
 	"github.com/q90016200/scheduler-go/internal/models"
 )
 
-func (cs *CronScheduler) AddJob(id string, task *models.Task) error {
+func AddJob(cs *CronScheduler, id string, task *models.Task) error {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
@@ -15,12 +15,12 @@ func (cs *CronScheduler) AddJob(id string, task *models.Task) error {
 	}
 
 	// 保存任務 ID
-	//cs.jobIDs[job.Name] = entryID
+	//cs.jobIDs[task.ID] = entryID
 
 	return nil
 }
 
-func (cs *CronScheduler) RemoveJob(id string) error {
+func RemoveJob(cs *CronScheduler, id string) error {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 

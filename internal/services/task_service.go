@@ -4,19 +4,20 @@ import (
 	"fmt"
 	"github.com/q90016200/scheduler-go/internal/models"
 	"github.com/q90016200/scheduler-go/internal/repositories"
+	"github.com/q90016200/scheduler-go/internal/scheduler"
 	"github.com/q90016200/scheduler-go/pkg/logger"
 	"github.com/rs/xid"
-	"sync"
 )
 
 type TaskService struct {
-	enableTasks *sync.Map
-	repo        *repositories.RepositoryManager
+	repo          *repositories.RepositoryManager
+	cronScheduler *scheduler.CronScheduler
 }
 
-func NewTaskService(repo *repositories.RepositoryManager) *TaskService {
+func NewTaskService(repo *repositories.RepositoryManager, cronScheduler *scheduler.CronScheduler) *TaskService {
 	return &TaskService{
-		repo: repo,
+		cronScheduler: cronScheduler,
+		repo:          repo,
 	}
 }
 
@@ -47,12 +48,12 @@ func (s *TaskService) CreateTask(input models.CreateTaskReq) (*models.Task, erro
 	}
 
 	// 當是執行的放入 syncMap 內，供排程取得目前可執行 task 清單
-	//if task.Status == models.TASK_STATUS_ACTIVE {
-	//	err := s.CreateCronTask(task.ID, task)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//}
+	if task.Status == models.TASK_STATUS_ACTIVE {
+		err := scheduler.AddJob(s.cronScheduler, task.ID, task)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	return task, nil
 }
@@ -80,16 +81,16 @@ func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models
 	}
 
 	// 重新啟動排程任務
-	//if err := s.DeleteCronTask(id); err != nil {
-	//	errMsg := fmt.Sprintf("task: %T, DeleteCronTask err: %v", task, err)
-	//	logger.Logger.Error(errMsg)
-	//	return nil, err
-	//}
-	//if err := s.CreateCronTask(id, task); err != nil {
-	//	errMsg := fmt.Sprintf("task: %T, CreateCronTask err: %v", task, err)
-	//	logger.Logger.Error(errMsg)
-	//	return nil, err
-	//}
+	if err := scheduler.RemoveJob(s.cronScheduler, id); err != nil {
+		errMsg := fmt.Sprintf("task: %T, RemoveJob err: %v", task, err)
+		logger.Logger.Error(errMsg)
+		return nil, err
+	}
+	if err := scheduler.AddJob(s.cronScheduler, id, task); err != nil {
+		errMsg := fmt.Sprintf("task: %T, AddJob err: %v", task, err)
+		logger.Logger.Error(errMsg)
+		return nil, err
+	}
 
 	return task, nil
 }
@@ -101,11 +102,11 @@ func (s *TaskService) DeleteTask(id string) error {
 		return err
 	}
 
-	//if err := s.DeleteCronTask(id); err != nil {
-	//	errMsg := fmt.Sprintf("task id: %s, DeleteCronTask err: %v", id, err)
-	//	logger.Logger.Error(errMsg)
-	//	return err
-	//}
+	if err := scheduler.RemoveJob(s.cronScheduler, id); err != nil {
+		errMsg := fmt.Sprintf("task id: %s, RemoveJob err: %v", id, err)
+		logger.Logger.Error(errMsg)
+		return err
+	}
 
 	return nil
 }

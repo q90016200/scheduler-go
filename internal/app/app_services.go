@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/q90016200/scheduler-go/internal/repositories"
+	"github.com/q90016200/scheduler-go/internal/scheduler"
 	"github.com/q90016200/scheduler-go/internal/services"
 	"gorm.io/gorm"
 )
@@ -13,12 +14,12 @@ type AppServices struct {
 	AuthService  *services.AuthService
 }
 
-func NewAppServices(db *gorm.DB) *AppServices {
+func NewAppServices(db *gorm.DB, cronScheduler *scheduler.CronScheduler) *AppServices {
 	repoManager := repositories.NewRepositoryManager(db)
 	//enableTasks := new(sync.Map)
 	return &AppServices{
 		//EnabledTasks: enableTasks, // 初始化共享變數
-		TaskServices: services.NewTaskService(repoManager),
+		TaskServices: services.NewTaskService(repoManager, cronScheduler),
 		AuthService:  services.NewAuthService(repoManager),
 	}
 }
