@@ -47,11 +47,17 @@ func (cs *CronScheduler) StartScheduler() {
 			_, exists := cs.jobIDs[task.ID]
 			if task.Status == models.TASK_STATUS_ACTIVE {
 				if !exists {
-					AddJob(cs, task.ID, &task)
+					err = AddJob(cs, task.ID, &task)
+					if err != nil {
+						logger.Logger.Info("task ID: " + task.ID + ", AddJob err:" + err.Error())
+					}
 				}
 			} else {
 				if exists {
-
+					err = RemoveJob(cs, task.ID)
+					if err != nil {
+						logger.Logger.Info("task ID: " + task.ID + ", RemoveJob err:" + err.Error())
+					}
 				}
 			}
 		}
