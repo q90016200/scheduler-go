@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"fmt"
+	"github.com/go-resty/resty/v2"
 	"github.com/q90016200/scheduler-go/internal/models"
 	"github.com/q90016200/scheduler-go/internal/repositories"
 	"github.com/q90016200/scheduler-go/pkg/logger"
@@ -12,11 +13,12 @@ import (
 
 // CronScheduler 全局的排程器實例
 type CronScheduler struct {
-	Cron   *cron.Cron
-	Log    *logger.LogrusAdapter
-	jobIDs map[string]cron.EntryID // 任務名稱與 EntryID 的映射
-	mu     sync.Mutex              // 保證多協程安全
-	repo   *repositories.RepositoryManager
+	Cron        *cron.Cron
+	Log         *logger.LogrusAdapter
+	jobIDs      map[string]cron.EntryID // 任務名稱與 EntryID 的映射
+	mu          sync.Mutex              // 保證多協程安全
+	repo        *repositories.RepositoryManager
+	restyClient *resty.Client
 }
 
 func NewCronScheduler(db *gorm.DB) *CronScheduler {
@@ -24,10 +26,11 @@ func NewCronScheduler(db *gorm.DB) *CronScheduler {
 	cronLogger := &logger.LogrusAdapter{Logger: log}
 	repoManager := repositories.NewRepositoryManager(db)
 	return &CronScheduler{
-		Cron:   cron.New(cron.WithChain(cron.SkipIfStillRunning(cronLogger))),
-		Log:    cronLogger,
-		jobIDs: make(map[string]cron.EntryID),
-		repo:   repoManager,
+		Cron:        cron.New(cron.WithChain(cron.SkipIfStillRunning(cronLogger))),
+		Log:         cronLogger,
+		jobIDs:      make(map[string]cron.EntryID),
+		repo:        repoManager,
+		restyClient: resty.New(),
 	}
 }
 
