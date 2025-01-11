@@ -16,7 +16,7 @@ func main() {
 	config.LoadConfig(".env")
 
 	// 初始化日誌
-	logger.Init()
+	logger.Init("logs/app.log")
 	logger.Logger.Info("日誌初始化完成")
 
 	// 初始化資料庫

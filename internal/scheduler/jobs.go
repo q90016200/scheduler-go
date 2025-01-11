@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/go-resty/resty/v2"
 	"github.com/q90016200/scheduler-go/internal/models"
+	"github.com/q90016200/scheduler-go/pkg/logger"
 	"github.com/robfig/cron/v3"
 	"time"
 )
@@ -49,20 +50,32 @@ func RunRequestHttp(client *resty.Client, task *models.Task) func() {
 	return func() {
 		client = client.SetTimeout(time.Duration(10) * time.Second)
 
+		var resp *resty.Response
+		var err error
 		if task.Method == "GET" {
-			client.R().Get(task.Endpoint)
+			resp, err = client.R().Get(task.Endpoint)
 		} else if task.Method == "POST" || task.Method == "PUT" || task.Method == "DELETE" {
 			req := client.R().SetBody(task.Payload)
 
 			switch task.Method {
 			case "POST":
-				req.Post(task.Endpoint)
+				resp, err = req.Post(task.Endpoint)
 			case "PUT":
-				req.Put(task.Endpoint)
+				resp, err = req.Put(task.Endpoint)
 			case "DELETE":
-				req.Delete(task.Endpoint)
+				resp, err = req.Delete(task.Endpoint)
 			}
 		}
+
+		if err != nil {
+			logger.Logger.Infof("task: %+v \n RunRequestHttp fail:%v", task, err)
+		}
+
+		//if resp.StatusCode() != http.StatusOK {
+		//	logger.Logger.Infof("task: %+v \n RunRequestHttp fail:%v", task, err)
+		//}
+
+		logger.Logger.Infof("task: %+v \n RunRequestHttp resp.StatusCode:%v resp:%v", task, resp.StatusCode(), string(resp.Body()))
 
 	}
 }

@@ -2,24 +2,53 @@ package logger
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/natefinch/lumberjack"
 	"github.com/sirupsen/logrus"
+	"io"
 	"os"
+	"sync"
+	"time"
 )
 
 // Logger 全域變數
 var Logger *logrus.Logger
+var once sync.Once
+
+// 定義自訂 Formatter，將時間轉換為 UTC+8
+type utc8Formatter struct {
+	Formatter logrus.Formatter
+}
+
+func (f *utc8Formatter) Format(entry *logrus.Entry) ([]byte, error) {
+	entry.Time = entry.Time.In(time.FixedZone("UTC+8", 8*60*60)) // 設定為 UTC+8
+	return f.Formatter.Format(entry)
+}
 
 // Init 初始化日誌設置
-func Init() {
-	Logger = logrus.New()
+func Init(logFilePath string) {
+	once.Do(func() {
+		Logger = logrus.New()
 
-	// 設定輸出至標準輸出
-	Logger.Out = os.Stdout
+		// 設定輪替檔案
+		logFile := &lumberjack.Logger{
+			Filename:   logFilePath,
+			MaxSize:    10, // 每個檔案最大大小（MB）
+			MaxBackups: 5,  // 保留的備份數量
+			MaxAge:     10, // 保留的天數
+			Compress:   true,
+		}
 
-	Logger.SetFormatter(&logrus.JSONFormatter{}) // 使用 JSON 格式，便於存儲和檢索
-
-	// 設定日誌等級
-	Logger.SetLevel(logrus.InfoLevel)
+		multiWriter := io.MultiWriter(os.Stdout, logFile)
+		Logger.SetOutput(multiWriter)
+		// 使用自訂的 Formatter
+		Logger.SetFormatter(&utc8Formatter{
+			Formatter: &logrus.JSONFormatter{
+				TimestampFormat: "2006-01-02T15:04:05", // 設定時間格式
+			},
+		})
+		// 設定日誌等級
+		Logger.SetLevel(logrus.InfoLevel)
+	})
 }
 
 func WithTrace(c *gin.Context) *logrus.Entry {
