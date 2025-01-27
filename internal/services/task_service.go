@@ -127,3 +127,30 @@ func (s *TaskService) CreateTaskGroup(input models.CreateTaskGroupReq) (*models.
 
 	return group, nil
 }
+
+func (s *TaskService) UpdateTaskGroup(id string, input models.UpdateTaskGroupReq) (*models.TaskGroup, error) {
+	group := &models.TaskGroup{
+		ID:          id,
+		Name:        input.Name,
+		Description: input.Description,
+		Status:      input.Status,
+		UpdatedBy:   input.UserId,
+	}
+
+	if err := s.repo.TaskRepo.UpdateGroup(group); err != nil {
+		errMsg := fmt.Sprintf("task: %T, repo.TaskRepo.UpdateGroup err: %v", group, err)
+		return nil, errors.New(errMsg)
+	}
+
+	return group, nil
+}
+
+func (s *TaskService) DeleteTaskGroup(id string) error {
+	if err := s.repo.TaskRepo.Delete(id); err != nil {
+		errMsg := fmt.Sprintf("task id: %s, repo.TaskRepo.DeleteGroup err: %v", id, err)
+		logger.Log.Error(errMsg)
+		return err
+	}
+
+	return nil
+}

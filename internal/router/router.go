@@ -23,6 +23,8 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 		taskRoutes.DELETE("/:id", middleware.JWTAuthMiddleware(), taskController.DeleteTaskHandler)
 
 		taskRoutes.POST("/group", middleware.JWTAuthMiddleware(), taskController.CreateTaskGroupHandler)
+		taskRoutes.PUT("/:id", middleware.JWTAuthMiddleware(), taskController.UpdateTaskGroupHandler)
+		taskRoutes.DELETE("/:id", middleware.JWTAuthMiddleware(), taskController.DeleteTaskGroupHandler)
 	}
 
 	// 用戶驗證路由

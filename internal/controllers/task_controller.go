@@ -177,3 +177,62 @@ func (ctrl *TaskController) CreateTaskGroupHandler(c *gin.Context) {
 	response.Success(c, task, "任務群組已建立")
 	return
 }
+
+// UpdateTaskGroupHandler 更新任務群組
+func (ctrl *TaskController) UpdateTaskGroupHandler(c *gin.Context) {
+	// 獲取帶有 trace_id 的 logger
+	log := logger.WithTrace(c)
+
+	id := c.Param("id")
+	if id == "" {
+		errMsg := "id is empty"
+		log.Info(errMsg)
+		response.Fail(c, http.StatusBadRequest, errMsg, nil)
+		return
+	}
+
+	var req models.UpdateTaskGroupReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// 解析 JSON 時的錯誤
+		log.Info(err.Error())
+		response.Fail(c, http.StatusBadRequest, err.Error(), nil)
+		return
+	}
+
+	if err := utils.MyValidator.Struct(req); err != nil {
+		log.Info(err.Error())
+		response.Fail(c, http.StatusBadRequest, err.Error(), nil)
+		return
+	}
+
+	task, err := ctrl.services.TaskServices.UpdateTaskGroup(id, req)
+	if err != nil {
+		log.Info(err.Error())
+		response.Fail(c, http.StatusInternalServerError, "更新任務群組失敗", err.Error())
+		return
+	}
+
+	response.Success(c, task, "任務群組已更新")
+}
+
+// DeleteTaskGroupHandler 刪除任務群組
+func (ctrl *TaskController) DeleteTaskGroupHandler(c *gin.Context) {
+	// 獲取帶有 trace_id 的 logger
+	log := logger.WithTrace(c)
+
+	id := c.Param("id")
+	if id == "" {
+		errMsg := "id is empty"
+		log.Info(errMsg)
+		response.Fail(c, http.StatusBadRequest, errMsg, nil)
+		return
+	}
+
+	if err := ctrl.services.TaskServices.DeleteTaskGroup(id); err != nil {
+		log.Info(err.Error())
+		response.Fail(c, http.StatusInternalServerError, "刪除任務群組失敗", err.Error())
+		return
+	}
+	response.Success(c, nil, "任務群組已刪除")
+	//c.JSON(http.StatusOK, gin.H{"message": "任務群組已刪除"})
+}

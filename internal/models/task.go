@@ -30,7 +30,7 @@ type TaskGroup struct {
 	Status      string `json:"status" gorm:"not null;size=10"` // 群組狀態 ('active', 'inactive')
 	CreatedBy   string `json:"created_by"`
 	UpdatedBy   string `json:"updated_by"`
-	CreatedAt   int64  `json:"created_at" gorm:"autoCreateTime"`
+	CreatedAt   int64  `json:"created_at" gorm:"autoCreateTime;<-:creat"`
 	UpdatedAt   int64  `json:"updated_at" gorm:"autoUpdateTime"`
 }
 

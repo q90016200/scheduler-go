@@ -12,6 +12,8 @@ type TaskRepository interface {
 	Update(task *models.Task) error
 	Delete(id string) error
 	CreateGroup(tg *models.TaskGroup) error
+	UpdateGroup(task *models.TaskGroup) error
+	DeleteGroup(id string) error
 }
 
 type taskRepository struct {
@@ -64,4 +66,12 @@ func (r *taskRepository) Delete(id string) error {
 
 func (r *taskRepository) CreateGroup(tg *models.TaskGroup) error {
 	return r.db.Create(tg).Error
+}
+
+func (r *taskRepository) UpdateGroup(tg *models.TaskGroup) error {
+	return r.db.Save(tg).Omit("CreatedAt").Error
+}
+
+func (r *taskRepository) DeleteGroup(id string) error {
+	return r.db.Where("id = ?", id).Delete(&models.TaskGroup{}).Error
 }
