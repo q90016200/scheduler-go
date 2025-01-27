@@ -110,3 +110,20 @@ func (s *TaskService) DeleteTask(id string) error {
 
 	return nil
 }
+
+func (s *TaskService) CreateTaskGroup(input models.CreateTaskGroupReq) (*models.TaskGroup, error) {
+	group := &models.TaskGroup{
+		ID:          xid.New().String(),
+		Name:        input.Name,
+		Description: input.Description,
+		Status:      input.Status,
+		CreatedBy:   input.UserId,
+		UpdatedBy:   input.UserId,
+	}
+
+	if err := s.repo.TaskRepo.CreateGroup(group); err != nil {
+		return nil, err
+	}
+
+	return group, nil
+}

@@ -25,8 +25,6 @@ func (ctrl *TaskController) ListTasksHandler(c *gin.Context) {
 	//	return
 	//}
 
-	logger.Log.Info("123")
-
 	// 提取查詢參數
 	status := c.Query("status") // 篩選條件：status
 
@@ -43,6 +41,7 @@ func (ctrl *TaskController) ListTasksHandler(c *gin.Context) {
 	tasks, err := ctrl.services.TaskServices.ListTasks(filters, sortField, sortOrder)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, "", nil)
+		return
 	}
 
 	// 取得任務清單的邏輯
@@ -142,4 +141,39 @@ func (ctrl *TaskController) DeleteTaskHandler(c *gin.Context) {
 	}
 	response.Success(c, nil, "任務已刪除")
 	//c.JSON(http.StatusOK, gin.H{"message": "任務已刪除"})
+}
+
+// CreateTaskGroupHandler 建立任務群組
+func (ctrl *TaskController) CreateTaskGroupHandler(c *gin.Context) {
+	// 獲取帶有 trace_id 的 logger
+	log := logger.WithTrace(c)
+
+	// 解析並綁定請求數據到 CreateTaskGroupReq 結構體
+	var req models.CreateTaskGroupReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Error(err.Error())
+		// 解析 JSON 時的錯誤
+		response.Fail(c, http.StatusBadRequest, err.Error(), nil)
+		return
+	}
+
+	if err := utils.MyValidator.Struct(req); err != nil {
+		log.Error(err.Error())
+		response.Fail(c, http.StatusBadRequest, err.Error(), nil)
+		return
+	}
+
+	// 當請求參數 status 未傳入時，預設為不啟動
+	if req.Status == "" {
+		req.Status = models.TASK_STATUS_INACTIVE
+	}
+
+	task, err := ctrl.services.TaskServices.CreateTaskGroup(req)
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, "建立任務群組失敗", err.Error())
+		return
+	}
+
+	response.Success(c, task, "任務群組已建立")
+	return
 }

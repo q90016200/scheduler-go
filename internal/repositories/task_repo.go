@@ -11,6 +11,7 @@ type TaskRepository interface {
 	Create(task *models.Task) error
 	Update(task *models.Task) error
 	Delete(id string) error
+	CreateGroup(tg *models.TaskGroup) error
 }
 
 type taskRepository struct {
@@ -28,7 +29,7 @@ func (r *taskRepository) ListTasks(filters map[string]interface{}, sortField str
 
 	// 篩選條件
 	if status, ok := filters["status"]; ok {
-		query = query.Where("status = ?", status)
+		query = query.Where("tasks.status = ?", status)
 	}
 
 	// 排序條件
@@ -41,7 +42,7 @@ func (r *taskRepository) ListTasks(filters map[string]interface{}, sortField str
 	}
 
 	// 查詢結果
-	err := query.Find(&tasks).Error
+	err := query.Preload("Group").Find(&tasks).Error
 	return tasks, err
 }
 
@@ -59,4 +60,8 @@ func (r *taskRepository) Update(task *models.Task) error {
 
 func (r *taskRepository) Delete(id string) error {
 	return r.db.Where("id = ?", id).Delete(&models.Task{}).Error
+}
+
+func (r *taskRepository) CreateGroup(tg *models.TaskGroup) error {
+	return r.db.Create(tg).Error
 }

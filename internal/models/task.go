@@ -5,21 +5,21 @@ const TASK_STATUS_INACTIVE = "inactive"
 
 // Task 任務表 (tasks)
 type Task struct {
-	ID          string    `json:"id" gorm:"column:id;primaryKey;autoIncrement"`
-	GroupID     *string   `json:"group_id" gorm:"column:group_id;default:null"`
-	Name        string    `json:"name" gorm:"column:name;size=100"`
-	Description string    `json:"description" gorm:"column:description"`
-	Schedule    string    `json:"schedule" gorm:"column:schedule"`
-	Type        string    `json:"type" gorm:"column:type;size:20"`
-	Endpoint    string    `json:"endpoint" gorm:"column:endpoint"`
-	Method      string    `json:"method" gorm:"column:method;size:10"`
-	Payload     string    `json:"payload" gorm:"column:payload"`
-	Status      string    `json:"status" gorm:"column:status;size:10"` // 群組狀態 ('active', 'inactive')
-	CreatedBy   string    `json:"created_by" gorm:"column:created_by"`
-	UpdatedBy   string    `json:"updated_by" gorm:"column:updated_by"`
-	CreatedAt   int64     `json:"created_at" gorm:"column:created_at;autoCreateTime;<-:create"`
-	UpdatedAt   int64     `json:"updated_at" gorm:"column:updated_at;autoUpdateTime"`
-	Group       TaskGroup `gorm:"foreignKey:GroupID"`
+	ID          string     `json:"id" gorm:"column:id;primaryKey;autoIncrement"`
+	GroupID     *string    `json:"group_id" gorm:"column:group_id;default:null"` // 外鍵
+	Name        string     `json:"name" gorm:"column:name;size=100"`
+	Description string     `json:"description" gorm:"column:description"`
+	Schedule    string     `json:"schedule" gorm:"column:schedule"`
+	Type        string     `json:"type" gorm:"column:type;size:20"`
+	Endpoint    string     `json:"endpoint" gorm:"column:endpoint"`
+	Method      string     `json:"method" gorm:"column:method;size:10"`
+	Payload     string     `json:"payload" gorm:"column:payload"`
+	Status      string     `json:"status" gorm:"column:status;size:10"` // 狀態 ('active', 'inactive')
+	CreatedBy   string     `json:"created_by" gorm:"column:created_by"`
+	UpdatedBy   string     `json:"updated_by" gorm:"column:updated_by"`
+	CreatedAt   int64      `json:"created_at" gorm:"column:created_at;autoCreateTime;<-:create"`
+	UpdatedAt   int64      `json:"updated_at" gorm:"column:updated_at;autoUpdateTime"`
+	Group       *TaskGroup `json:"group" gorm:"foreignKey:GroupID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"` // 關聯設置
 }
 
 // TaskGroup 群組表 (groups)
@@ -58,4 +58,18 @@ type UpdateTaskReq struct {
 	Payload     string  `json:"payload"`
 	Status      string  `json:"status" validate:"omitempty,oneof=active inactive"`
 	UserId      string  `json:"user_id"`
+}
+
+type CreateTaskGroupReq struct {
+	Name        string `json:"name" validate:"required"`
+	Description string `json:"description"`
+	Status      string `json:"status" validate:"omitempty,oneof=active inactive"`
+	UserId      string `json:"user_id"`
+}
+
+type UpdateTaskGroupReq struct {
+	Name        string `json:"name" validate:"required"`
+	Description string `json:"description"`
+	Status      string `json:"status" validate:"omitempty,oneof=active inactive"`
+	UserId      string `json:"user_id"`
 }
