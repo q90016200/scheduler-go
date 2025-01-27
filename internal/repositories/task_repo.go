@@ -54,7 +54,7 @@ func (r *taskRepository) Create(task *models.Task) error {
 }
 
 func (r *taskRepository) Update(task *models.Task) error {
-	return r.db.Save(task).Error
+	return r.db.Save(task).Omit("CreatedAt").Error
 }
 
 func (r *taskRepository) Delete(id string) error {

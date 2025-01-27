@@ -22,7 +22,8 @@ type CronScheduler struct {
 }
 
 func NewCronScheduler(db *gorm.DB) *CronScheduler {
-	log := logger.Logger
+	//log := logger.Init("../../logs/cron.log")
+	log := logger.Log
 	cronLogger := &logger.LogrusAdapter{Logger: log}
 	repoManager := repositories.NewRepositoryManager(db)
 	return &CronScheduler{
@@ -37,7 +38,8 @@ func NewCronScheduler(db *gorm.DB) *CronScheduler {
 // StartScheduler 啟動排程器並註冊所有任務
 func (cs *CronScheduler) StartScheduler() {
 	// 建立每分鐘檢查任務狀態任務
-	_, err := cs.Cron.AddFunc("@every 1m", func() {
+	_, err := cs.Cron.AddFunc("* * * * *", func() {
+		fmt.Println("[cron] Running cron scheduler jobs", cs.jobIDs)
 		tasks, err := cs.repo.TaskRepo.ListTasks(map[string]interface{}{
 			"status": models.TASK_STATUS_ACTIVE,
 		}, "created_at", "ASC")
@@ -52,21 +54,21 @@ func (cs *CronScheduler) StartScheduler() {
 				if !exists {
 					err = AddJob(cs, task.ID, &task)
 					if err != nil {
-						logger.Logger.Info("task ID: " + task.ID + ", AddJob err:" + err.Error())
+						cs.Log.Info("task ID: " + task.ID + ", AddJob err:" + err.Error())
 					}
 				}
 			} else {
 				if exists {
 					err = RemoveJob(cs, task.ID)
 					if err != nil {
-						logger.Logger.Info("task ID: " + task.ID + ", RemoveJob err:" + err.Error())
+						cs.Log.Info("task ID: " + task.ID + ", RemoveJob err:" + err.Error())
 					}
 				}
 			}
 		}
 	})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to scheduler cleanup task")
+		cs.Log.Error(err, "Failed to scheduler cleanup task")
 	}
 
 	cs.Cron.Start()
@@ -76,6 +78,6 @@ func (cs *CronScheduler) StartScheduler() {
 func (cs *CronScheduler) StopCronScheduler() {
 	if cs.Cron != nil {
 		cs.Cron.Stop()
-		logger.Logger.Info("排程器已停止")
+		cs.Log.Info("排程器已停止")
 	}
 }

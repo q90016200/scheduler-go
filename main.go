@@ -17,7 +17,7 @@ func main() {
 
 	// 初始化日誌
 	logger.Init("logs/app.log")
-	logger.Logger.Info("日誌初始化完成")
+	logger.Log.Info("日誌初始化完成")
 
 	// 初始化資料庫
 	db, err := database.InitializeDB()
@@ -35,6 +35,10 @@ func main() {
 	r := gin.Default()
 	r = router.SetupRouter(r, services)
 
+	// 啟動排程器
+	cronScheduler.StartScheduler()
+	defer cronScheduler.StartScheduler()
+
 	// 啟動 HTTP 服務
 	port := config.AppConfig.ServerPort
 	log.Printf("服務啟動中，端口：%s", port)
@@ -42,11 +46,7 @@ func main() {
 		log.Fatalf("服務啟動失敗: %v", err)
 	}
 
-	// 啟動排程器
-	//scheduler.StartScheduler(services)
-	//defer scheduler.StopScheduler()
-	//
-	//// 等待信號以安全退出
+	// 等待信號以安全退出
 	//quit := make(chan os.Signal, 1)
 	//signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	//<-quit

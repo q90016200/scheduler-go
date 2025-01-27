@@ -18,7 +18,7 @@ func AddJob(cs *CronScheduler, id string, task *models.Task) error {
 
 	switch task.Type {
 	case "http":
-		entryID, err = cs.Cron.AddFunc(task.Schedule, RunRequestHttp(cs.restyClient, task))
+		entryID, err = cs.Cron.AddFunc(task.Schedule, RunRequestHttp(cs.Log, cs.restyClient, task))
 		if err != nil {
 			cs.Log.Error(err, fmt.Sprintf("failed to RunHttpGet job: %+v", task))
 		}
@@ -28,6 +28,7 @@ func AddJob(cs *CronScheduler, id string, task *models.Task) error {
 	}
 
 	// 保存任務 ID
+	cs.Log.Info(fmt.Sprintf("新增 job: %s", task.ID))
 	cs.jobIDs[task.ID] = entryID
 
 	return nil
@@ -40,13 +41,13 @@ func RemoveJob(cs *CronScheduler, id string) error {
 	entryID, exists := cs.jobIDs[id]
 	if exists {
 		cs.Cron.Remove(entryID)
-		cs.Log.Info("Removed job: %s", id)
+		cs.Log.Info(fmt.Sprintf("Removed job: %s", id))
 	}
 
 	return nil
 }
 
-func RunRequestHttp(client *resty.Client, task *models.Task) func() {
+func RunRequestHttp(log *logger.LogrusAdapter, client *resty.Client, task *models.Task) func() {
 	return func() {
 		client = client.SetTimeout(time.Duration(10) * time.Second)
 
@@ -68,14 +69,14 @@ func RunRequestHttp(client *resty.Client, task *models.Task) func() {
 		}
 
 		if err != nil {
-			logger.Logger.Infof("task: %+v \n RunRequestHttp fail:%v", task, err)
+			log.Info(fmt.Sprintf("task: %+v \n RunRequestHttp fail:%v", task, task))
 		}
 
 		//if resp.StatusCode() != http.StatusOK {
-		//	logger.Logger.Infof("task: %+v \n RunRequestHttp fail:%v", task, err)
+		//	log.Infof("task: %+v \n RunRequestHttp fail:%v", task, err)
 		//}
 
-		logger.Logger.Infof("task: %+v \n RunRequestHttp resp.StatusCode:%v resp:%v", task, resp.StatusCode(), string(resp.Body()))
+		log.Info(fmt.Sprintf("task: %+v \n RunRequestHttp resp.StatusCode:%v resp:%v", task, resp.StatusCode(), string(resp.Body())))
 
 	}
 }

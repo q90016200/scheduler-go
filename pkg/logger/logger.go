@@ -1,54 +1,84 @@
 package logger
 
 import (
+	"bytes"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/natefinch/lumberjack"
 	"github.com/sirupsen/logrus"
 	"io"
 	"os"
-	"sync"
-	"time"
+	"path"
 )
 
-// Logger 全域變數
-var Logger *logrus.Logger
-var once sync.Once
+const (
+	red    = 31
+	yellow = 33
+	blue   = 36
+	gray   = 37
+)
 
-// 定義自訂 Formatter，將時間轉換為 UTC+8
-type utc8Formatter struct {
-	Formatter logrus.Formatter
+// Log 全域變數
+var Log *logrus.Logger
+
+type LogFormatter struct {
 }
 
-func (f *utc8Formatter) Format(entry *logrus.Entry) ([]byte, error) {
-	entry.Time = entry.Time.In(time.FixedZone("UTC+8", 8*60*60)) // 設定為 UTC+8
-	return f.Formatter.Format(entry)
+func (t LogFormatter) Format(entry *logrus.Entry) ([]byte, error) {
+	//根据不同的level展示颜色
+	var levelColor int
+	switch entry.Level {
+	case logrus.DebugLevel, logrus.TraceLevel:
+		levelColor = gray
+	case logrus.WarnLevel:
+		levelColor = yellow
+	case logrus.ErrorLevel, logrus.FatalLevel, logrus.PanicLevel:
+		levelColor = red
+	default:
+		levelColor = blue
+	}
+	// 字节缓冲区
+	var b *bytes.Buffer
+	if entry.Buffer != nil {
+		b = entry.Buffer
+	} else {
+		b = &bytes.Buffer{}
+	}
+	//自定义日期格式
+	timestamp := entry.Time.Format("2006-01-02 15:04:06")
+	if entry.HasCaller() {
+		//自定义文件路径
+		funcVal := entry.Caller.Function
+		fileVal := fmt.Sprintf("%s:%d", path.Base(entry.Caller.File), entry.Caller.Line)
+		//自定义输出格式
+		fmt.Fprintf(b, "[%s] \x1b[%dm[%s]\x1b[0m %s %s %s\n", timestamp, levelColor, entry.Level, fileVal, funcVal, entry.Message)
+	} else {
+		fmt.Fprintf(b, "[%s] \x1b[%dm[%s]\x1b[0m  %s\n", timestamp, levelColor, entry.Level, entry.Message)
+	}
+	return b.Bytes(), nil
 }
 
 // Init 初始化日誌設置
-func Init(logFilePath string) {
-	once.Do(func() {
-		Logger = logrus.New()
+func Init(logFilePath string) *logrus.Logger {
+	Log = logrus.New()
 
-		// 設定輪替檔案
-		logFile := &lumberjack.Logger{
-			Filename:   logFilePath,
-			MaxSize:    10, // 每個檔案最大大小（MB）
-			MaxBackups: 5,  // 保留的備份數量
-			MaxAge:     10, // 保留的天數
-			Compress:   true,
-		}
+	// 設定輪替檔案
+	logFile := &lumberjack.Logger{
+		Filename:   logFilePath,
+		MaxSize:    10, // 每個檔案最大大小（MB）
+		MaxBackups: 5,  // 保留的備份數量
+		MaxAge:     10, // 保留的天數
+		Compress:   true,
+	}
+	multiWriter := io.MultiWriter(os.Stdout, logFile)
+	Log.SetOutput(multiWriter)
 
-		multiWriter := io.MultiWriter(os.Stdout, logFile)
-		Logger.SetOutput(multiWriter)
-		// 使用自訂的 Formatter
-		Logger.SetFormatter(&utc8Formatter{
-			Formatter: &logrus.JSONFormatter{
-				TimestampFormat: "2006-01-02T15:04:05", // 設定時間格式
-			},
-		})
-		// 設定日誌等級
-		Logger.SetLevel(logrus.InfoLevel)
-	})
+	// 啟用 Caller 報告，開啟回傳函數名稱和行號
+	Log.SetReportCaller(true)
+	Log.SetFormatter(&LogFormatter{}) //设置自定义的Formatter
+	Log.SetLevel(logrus.DebugLevel)   //设置最低等级
+
+	return Log
 }
 
 func WithTrace(c *gin.Context) *logrus.Entry {
@@ -58,7 +88,7 @@ func WithTrace(c *gin.Context) *logrus.Entry {
 	}
 
 	// 返回包含 trace_id 的 Logrus Entry
-	return Logger.WithField("trace_id", traceID)
+	return Log.WithField("trace_id", traceID)
 }
 
 // LogrusAdapter 是一個適配 logrus 的 cron.Logger 實現

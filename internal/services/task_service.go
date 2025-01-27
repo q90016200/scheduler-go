@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"fmt"
 	"github.com/q90016200/scheduler-go/internal/models"
 	"github.com/q90016200/scheduler-go/internal/repositories"
@@ -76,19 +77,18 @@ func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models
 
 	if err := s.repo.TaskRepo.Update(task); err != nil {
 		errMsg := fmt.Sprintf("task: %T, repo.TaskRepo.Update err: %v", task, err)
-		logger.Logger.Error(errMsg)
-		return nil, err
+		return nil, errors.New(errMsg)
 	}
 
 	// 重新啟動排程任務
 	if err := scheduler.RemoveJob(s.cronScheduler, id); err != nil {
 		errMsg := fmt.Sprintf("task: %T, RemoveJob err: %v", task, err)
-		logger.Logger.Error(errMsg)
+		logger.Log.Error(errMsg)
 		return nil, err
 	}
 	if err := scheduler.AddJob(s.cronScheduler, id, task); err != nil {
 		errMsg := fmt.Sprintf("task: %T, AddJob err: %v", task, err)
-		logger.Logger.Error(errMsg)
+		logger.Log.Error(errMsg)
 		return nil, err
 	}
 
@@ -98,13 +98,13 @@ func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models
 func (s *TaskService) DeleteTask(id string) error {
 	if err := s.repo.TaskRepo.Delete(id); err != nil {
 		errMsg := fmt.Sprintf("task id: %s, repo.TaskRepo.Delete err: %v", id, err)
-		logger.Logger.Error(errMsg)
+		logger.Log.Error(errMsg)
 		return err
 	}
 
 	if err := scheduler.RemoveJob(s.cronScheduler, id); err != nil {
 		errMsg := fmt.Sprintf("task id: %s, RemoveJob err: %v", id, err)
-		logger.Logger.Error(errMsg)
+		logger.Log.Error(errMsg)
 		return err
 	}
 

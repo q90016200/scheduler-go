@@ -17,7 +17,7 @@ type Task struct {
 	Status      string    `json:"status" gorm:"column:status;size:10"` // 群組狀態 ('active', 'inactive')
 	CreatedBy   string    `json:"created_by" gorm:"column:created_by"`
 	UpdatedBy   string    `json:"updated_by" gorm:"column:updated_by"`
-	CreatedAt   int64     `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+	CreatedAt   int64     `json:"created_at" gorm:"column:created_at;autoCreateTime;<-:create"`
 	UpdatedAt   int64     `json:"updated_at" gorm:"column:updated_at;autoUpdateTime"`
 	Group       TaskGroup `gorm:"foreignKey:GroupID"`
 }
