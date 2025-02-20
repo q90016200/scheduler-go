@@ -31,7 +31,7 @@ func (r *taskRepository) ListTasks(filters map[string]interface{}, sortField str
 
 	// 篩選條件
 	if status, ok := filters["status"]; ok {
-		query = query.Where("tasks.status = ?", status)
+		query = query.Where("tasks.status = ?", status).Where("group.status = ? OR IS NULL", status)
 	}
 
 	// 排序條件
