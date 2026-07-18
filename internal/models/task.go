@@ -41,7 +41,7 @@ type CreateTaskReq struct {
 	Schedule    string  `json:"schedule" validate:"required"`
 	Type        string  `json:"type" validate:"required" `
 	EndPoint    string  `json:"endpoint" validate:"required"`
-	Method      string  `json:"method" validate:"omitempty,required_if=Type HTTP,oneof=GET POST PUT DELETE PATCH"`
+	Method      string  `json:"method"`
 	Payload     string  `json:"payload"`
 	Status      string  `json:"status" validate:"omitempty,oneof=active inactive"`
 	UserId      string  `json:"user_id"`
@@ -54,7 +54,7 @@ type UpdateTaskReq struct {
 	Schedule    string  `json:"schedule" validate:"required"`
 	Type        string  `json:"type" validate:"required" `
 	EndPoint    string  `json:"endpoint" validate:"required"`
-	Method      string  `json:"method" validate:"omitempty,required_if=Type HTTP,oneof=GET POST PUT DELETE PATCH"`
+	Method      string  `json:"method"`
 	Payload     string  `json:"payload"`
 	Status      string  `json:"status" validate:"omitempty,oneof=active inactive"`
 	UserId      string  `json:"user_id"`

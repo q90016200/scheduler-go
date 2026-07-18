@@ -2,18 +2,18 @@ package services
 
 import (
 	"github.com/q90016200/scheduler-go/internal/models"
-	"github.com/q90016200/scheduler-go/internal/repositories"
 	"github.com/rs/xid"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 	"time"
 )
 
 type AuthService struct {
-	repo *repositories.RepositoryManager
+	db *gorm.DB
 }
 
-func NewAuthService(repo *repositories.RepositoryManager) *AuthService {
-	return &AuthService{repo: repo}
+func NewAuthService(db *gorm.DB) *AuthService {
+	return &AuthService{db: db}
 }
 
 func (s *AuthService) Register(username, password string) error {
@@ -30,14 +30,14 @@ func (s *AuthService) Register(username, password string) error {
 		UpdatedAt: time.Now(),
 		Status:    true,
 	}
-	return s.repo.UserRepo.Create(user)
+	return s.db.Create(user).Error
 }
 
 func (s *AuthService) Authenticate(username, password string) (*models.User, error) {
-	user, err := s.repo.UserRepo.FindByUsername(username)
-	if err != nil {
+	var user models.User
+	if err := s.db.Where("user_name = ?", username).First(&user).Error; err != nil {
 		return nil, err
 	}
-	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
-	return user, err
+	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
+	return &user, err
 }

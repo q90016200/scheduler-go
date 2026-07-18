@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/go-resty/resty/v2"
 	"github.com/q90016200/scheduler-go/internal/models"
-	"github.com/q90016200/scheduler-go/internal/repositories"
 	"github.com/q90016200/scheduler-go/pkg/logger"
 	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
@@ -17,7 +16,7 @@ type CronScheduler struct {
 	Log         *logger.LogrusAdapter
 	jobIDs      map[string]cron.EntryID // 任務名稱與 EntryID 的映射
 	mu          sync.Mutex              // 保證多協程安全
-	repo        *repositories.RepositoryManager
+	db          *gorm.DB
 	restyClient *resty.Client
 }
 
@@ -25,12 +24,11 @@ func NewCronScheduler(db *gorm.DB) *CronScheduler {
 	//log := logger.Init("../../logs/cron.log")
 	log := logger.Log
 	cronLogger := &logger.LogrusAdapter{Logger: log}
-	repoManager := repositories.NewRepositoryManager(db)
 	return &CronScheduler{
 		Cron:        cron.New(cron.WithChain(cron.SkipIfStillRunning(cronLogger))),
 		Log:         cronLogger,
 		jobIDs:      make(map[string]cron.EntryID),
-		repo:        repoManager,
+		db:          db,
 		restyClient: resty.New(),
 	}
 }
@@ -40,9 +38,11 @@ func (cs *CronScheduler) StartScheduler() {
 	// 建立每分鐘檢查任務狀態任務
 	_, err := cs.Cron.AddFunc("* * * * *", func() {
 		fmt.Println("[cron] Running cron scheduler jobs", cs.jobIDs)
-		tasks, err := cs.repo.TaskRepo.ListTasks(map[string]interface{}{
-			"status": models.TASK_STATUS_ACTIVE,
-		}, "created_at", "ASC")
+		var tasks []models.Task
+		err := cs.db.Where("status = ?", models.TASK_STATUS_ACTIVE).
+			Order("created_at ASC").
+			Preload("Group").
+			Find(&tasks).Error
 		if err != nil {
 			errMsg := fmt.Sprintf("TaskServices.ListTasks err: %v", err)
 			cs.Log.Error(nil, errMsg)

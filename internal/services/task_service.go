@@ -4,27 +4,54 @@ import (
 	"errors"
 	"fmt"
 	"github.com/q90016200/scheduler-go/internal/models"
-	"github.com/q90016200/scheduler-go/internal/repositories"
 	"github.com/q90016200/scheduler-go/internal/scheduler"
 	"github.com/q90016200/scheduler-go/pkg/logger"
 	"github.com/rs/xid"
+	"gorm.io/gorm"
 )
 
 type TaskService struct {
-	repo          *repositories.RepositoryManager
+	db            *gorm.DB
 	cronScheduler *scheduler.CronScheduler
 }
 
-func NewTaskService(repo *repositories.RepositoryManager, cronScheduler *scheduler.CronScheduler) *TaskService {
+func NewTaskService(db *gorm.DB, cronScheduler *scheduler.CronScheduler) *TaskService {
 	return &TaskService{
 		cronScheduler: cronScheduler,
-		repo:          repo,
+		db:            db,
 	}
 }
 
+// listTasksSortableFields 排序欄位白名單，避免 sortField 直接拼進 SQL 造成 injection
+var listTasksSortableFields = map[string]bool{
+	"name":       true,
+	"created_at": true,
+	"status":     true,
+	"schedule":   true,
+}
+
 // ListTasks 支持篩選與排序
-func (s *TaskService) ListTasks(filters map[string]interface{}, sortField, sortOrder string) ([]models.Task, error) {
-	return s.repo.TaskRepo.ListTasks(filters, sortField, sortOrder)
+func (s *TaskService) ListTasks(status, sortField, sortOrder string) ([]models.Task, error) {
+	var tasks []models.Task
+	query := s.db
+
+	// 篩選條件
+	if status != "" {
+		query = query.Where("tasks.status = ?", status).Where("group.status = ? OR IS NULL", status)
+	}
+
+	// 排序條件
+	if listTasksSortableFields[sortField] {
+		order := "ASC"
+		if sortOrder == "desc" {
+			order = "DESC"
+		}
+		query = query.Order(sortField + " " + order)
+	}
+
+	// 查詢結果
+	err := query.Preload("Group").Find(&tasks).Error
+	return tasks, err
 }
 
 func (s *TaskService) CreateTask(input models.CreateTaskReq) (*models.Task, error) {
@@ -44,7 +71,7 @@ func (s *TaskService) CreateTask(input models.CreateTaskReq) (*models.Task, erro
 		UpdatedBy:   input.UserId,
 	}
 
-	if err := s.repo.TaskRepo.Create(task); err != nil {
+	if err := s.db.Create(task).Error; err != nil {
 		return nil, err
 	}
 
@@ -75,8 +102,8 @@ func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models
 		UpdatedBy:   input.UserId,
 	}
 
-	if err := s.repo.TaskRepo.Update(task); err != nil {
-		errMsg := fmt.Sprintf("task: %T, repo.TaskRepo.Update err: %v", task, err)
+	if err := s.db.Save(task).Omit("CreatedAt").Error; err != nil {
+		errMsg := fmt.Sprintf("task: %T, db.Save err: %v", task, err)
 		return nil, errors.New(errMsg)
 	}
 
@@ -96,8 +123,8 @@ func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models
 }
 
 func (s *TaskService) DeleteTask(id string) error {
-	if err := s.repo.TaskRepo.Delete(id); err != nil {
-		errMsg := fmt.Sprintf("task id: %s, repo.TaskRepo.Delete err: %v", id, err)
+	if err := s.db.Where("id = ?", id).Delete(&models.Task{}).Error; err != nil {
+		errMsg := fmt.Sprintf("task id: %s, db.Delete err: %v", id, err)
 		logger.Log.Error(errMsg)
 		return err
 	}
@@ -121,7 +148,7 @@ func (s *TaskService) CreateTaskGroup(input models.CreateTaskGroupReq) (*models.
 		UpdatedBy:   input.UserId,
 	}
 
-	if err := s.repo.TaskRepo.CreateGroup(group); err != nil {
+	if err := s.db.Create(group).Error; err != nil {
 		return nil, err
 	}
 
@@ -137,8 +164,8 @@ func (s *TaskService) UpdateTaskGroup(id string, input models.UpdateTaskGroupReq
 		UpdatedBy:   input.UserId,
 	}
 
-	if err := s.repo.TaskRepo.UpdateGroup(group); err != nil {
-		errMsg := fmt.Sprintf("task: %T, repo.TaskRepo.UpdateGroup err: %v", group, err)
+	if err := s.db.Save(group).Omit("CreatedAt").Error; err != nil {
+		errMsg := fmt.Sprintf("task: %T, db.Save err: %v", group, err)
 		return nil, errors.New(errMsg)
 	}
 
@@ -146,8 +173,8 @@ func (s *TaskService) UpdateTaskGroup(id string, input models.UpdateTaskGroupReq
 }
 
 func (s *TaskService) DeleteTaskGroup(id string) error {
-	if err := s.repo.TaskRepo.Delete(id); err != nil {
-		errMsg := fmt.Sprintf("task id: %s, repo.TaskRepo.DeleteGroup err: %v", id, err)
+	if err := s.db.Where("id = ?", id).Delete(&models.TaskGroup{}).Error; err != nil {
+		errMsg := fmt.Sprintf("task id: %s, db.Delete err: %v", id, err)
 		logger.Log.Error(errMsg)
 		return err
 	}

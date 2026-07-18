@@ -31,16 +31,10 @@ func (ctrl *TaskController) ListTasksHandler(c *gin.Context) {
 	sortField := c.Query("sort_field") // 排序字段
 	sortOrder := c.Query("sort_order") // 排序方式（asc 或 desc）
 
-	// 設置篩選條件
-	filters := map[string]interface{}{}
-	if status != "" {
-		filters["status"] = status
-	}
-
 	// 調用 Service
-	tasks, err := ctrl.services.TaskServices.ListTasks(filters, sortField, sortOrder)
+	tasks, err := ctrl.services.TaskServices.ListTasks(status, sortField, sortOrder)
 	if err != nil {
-		response.Fail(c, http.StatusInternalServerError, "", nil)
+		response.Fail(c, http.StatusInternalServerError, "取得任務清單失敗", err.Error())
 		return
 	}
 
@@ -58,13 +52,13 @@ func (ctrl *TaskController) CreateTaskHandler(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Error(err.Error())
 		// 解析 JSON 時的錯誤
-		response.Fail(c, http.StatusBadRequest, err.Error(), nil)
+		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
 		return
 	}
 
 	if err := utils.MyValidator.Struct(req); err != nil {
 		log.Error(err.Error())
-		response.Fail(c, http.StatusBadRequest, err.Error(), nil)
+		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
 		return
 	}
 
@@ -100,13 +94,13 @@ func (ctrl *TaskController) UpdateTaskHandler(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		// 解析 JSON 時的錯誤
 		log.Info(err.Error())
-		response.Fail(c, http.StatusBadRequest, err.Error(), nil)
+		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
 		return
 	}
 
 	if err := utils.MyValidator.Struct(req); err != nil {
 		log.Info(err.Error())
-		response.Fail(c, http.StatusBadRequest, err.Error(), nil)
+		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
 		return
 	}
 
@@ -153,13 +147,13 @@ func (ctrl *TaskController) CreateTaskGroupHandler(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Error(err.Error())
 		// 解析 JSON 時的錯誤
-		response.Fail(c, http.StatusBadRequest, err.Error(), nil)
+		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
 		return
 	}
 
 	if err := utils.MyValidator.Struct(req); err != nil {
 		log.Error(err.Error())
-		response.Fail(c, http.StatusBadRequest, err.Error(), nil)
+		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
 		return
 	}
 
@@ -195,13 +189,13 @@ func (ctrl *TaskController) UpdateTaskGroupHandler(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		// 解析 JSON 時的錯誤
 		log.Info(err.Error())
-		response.Fail(c, http.StatusBadRequest, err.Error(), nil)
+		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
 		return
 	}
 
 	if err := utils.MyValidator.Struct(req); err != nil {
 		log.Info(err.Error())
-		response.Fail(c, http.StatusBadRequest, err.Error(), nil)
+		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
 		return
 	}
 
