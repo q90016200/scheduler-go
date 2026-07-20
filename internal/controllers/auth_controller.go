@@ -81,3 +81,21 @@ func (ctrl *AuthController) LogoutHandler(c *gin.Context) {
 	response.Success(c, gin.H{}, "登出成功")
 	return
 }
+
+// MeHandler 取得目前登入使用者
+func (ctrl *AuthController) MeHandler(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		response.Fail(c, http.StatusUnauthorized, "未登入", nil)
+		return
+	}
+
+	user, err := ctrl.services.AuthService.GetUserByID(userID.(string))
+	if err != nil {
+		response.Fail(c, http.StatusNotFound, "使用者不存在", nil)
+		return
+	}
+
+	user.Password = "" // 不將密碼雜湊回傳給前端
+	response.Success(c, user, "成功")
+}

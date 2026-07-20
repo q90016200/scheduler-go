@@ -41,3 +41,10 @@ func (s *AuthService) Authenticate(username, password string) (*models.User, err
 	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	return &user, err
 }
+
+// GetUserByID 依 ID 取得使用者
+func (s *AuthService) GetUserByID(id string) (*models.User, error) {
+	var user models.User
+	err := s.db.First(&user, "id = ?", id).Error
+	return &user, err
+}

@@ -6,10 +6,9 @@ scheduler-tool/
 │       └── migrate.go
 ├── config/                 # 配置檔案和初始化
 │   └── config.go
-├── docker/                 # 本地開發用 docker-compose（mysql、redis，redis 目前未被程式使用）
+├── docker/                 # 本地開發用 docker-compose（postgres、redis，redis 目前未被程式使用）
 │   ├── docker-compose.yaml
-│   ├── mysql/
-│   └── mysql_init.sql
+│   └── postgres/
 ├── internal/               # 私有應用程式邏輯
 │   ├── app/                # 依賴組裝 (AppServices)
 │   │   └── app_services.go
@@ -19,26 +18,65 @@ scheduler-tool/
 │   │   └── database.go
 │   ├── controllers/        # 控制器層（處理 API 請求）
 │   │   ├── auth_controller.go
-│   │   └── task_controller.go # 任務與群組管理控制器
+│   │   ├── task_controller.go           # 任務與群組管理控制器
+│   │   └── task_execution_log_controller.go # 任務執行紀錄控制器
 │   ├── models/             # 資料結構和資料庫模型
 │   │   ├── user.go
-│   │   └── task.go         # 任務、群組模型
+│   │   ├── task.go                # 任務、群組模型
+│   │   └── task_execution_log.go  # 任務執行紀錄模型
 │   ├── services/           # 業務邏輯層，直接操作 *gorm.DB（無獨立的 repositories 層）
 │   │   ├── auth_service.go
-│   │   └── task_service.go # 任務與群組服務
-│   ├── scheduler/          # cron 排程器，執行 http/rpc 任務
+│   │   ├── task_service.go            # 任務與群組服務
+│   │   └── task_execution_log_service.go # 任務執行紀錄服務
+│   ├── scheduler/          # cron 排程器，執行 http/rpc 任務、記錄執行結果、清除過期紀錄
 │   │   ├── cron.go
 │   │   └── jobs.go
 │   ├── middleware/         # 中介軟體
-│   │   └── auth_middleware.go
-│   └── router/             # 路由設定
+│   │   ├── auth_middleware.go
+│   │   └── cors_middleware.go   # CORS（僅開發模式掛載）
+│   └── router/             # 路由設定，同時負責服務 web/dist 前端靜態檔（SPA fallback）
 │       └── router.go
 ├── pkg/                    # 公用元件（工具、輔助功能等）
 │   ├── logger/             # 日誌記錄
 │   ├── response/           # API 回應封裝
 │   └── utils/              # 驗證器等公用工具
+├── web/                    # Vue3 + TypeScript + Vite 前端（獨立專案，見下方「前端開發」）
 ├── .env                    # 環境變數配置
 ├── go.mod                  # Go modules 配置
 └── README.md               # 專案說明文件
 
 ```
+
+## 環境變數 (.env)
+
+| 變數 | 說明 | 預設 |
+|---|---|---|
+| `APP_ENV` | `development` 時才會掛載 CORS middleware（正式環境同源部署不需要） | `development` |
+| `SERVER_PORT` | Gin 監聽埠 | - |
+| `SERVER_DOMAIN` | cookie 的 domain | - |
+| `APP_SECRET` | JWT 簽章金鑰 | - |
+| `TOKEN_EXPIRY` | JWT/cookie 有效秒數 | - |
+| `CORS_ALLOW_ORIGINS` | 開發模式允許的前端來源，逗號分隔 | 空 |
+| `EXECUTION_LOG_RETENTION_DAYS` | 任務執行紀錄保留天數，超過會被每日排程清除 | `120` |
+| `POSTGRES_*` | PostgreSQL 連線資訊 | - |
+
+## API 端點
+
+**Auth**（`/api/auth`）：`POST /register`、`POST /login`（設定 `auth_token` HttpOnly cookie）、`POST /logout`（需登入）、`GET /me`（需登入，取得目前使用者）。
+
+**Task**（`/api/tasks`）：`GET /`（清單，可用 `status`/`sort_field`/`sort_order` 查詢參數）、`GET /:id`、`POST /`（需登入）、`PUT /:id`（需登入）、`DELETE /:id`（需登入）。
+
+**TaskGroup**（`/api/tasks/group`）：`GET /`、`GET /:id`、`POST /`（需登入）、`PUT /:id`（需登入）、`DELETE /:id`（需登入）。
+
+**執行紀錄**（`/api/tasks/logs`）：`GET /`（可用 `task_id` 篩選，`limit`/`offset` 分頁）、`GET /:id`。
+
+## 前端開發
+
+```bash
+cd web
+npm install
+npm run dev      # 開發伺服器，透過 vite.config.ts 的 proxy 打後端 /api（後端埠設定於 web/.env.development 的 VITE_BACKEND_PORT）
+npm run build    # 產出 web/dist，供 Go 後端同源服務
+```
+
+正式部署：`cd web && npm run build` 產出 `web/dist/`，與 Go 執行檔放在同一相對路徑下啟動（`go run main.go` 或編譯後的 binary），`internal/router/router.go` 會直接服務這個資料夾並提供 SPA fallback，不需要額外的 nginx，也不需要開啟 CORS。

@@ -20,7 +20,7 @@ func main() {
 
 	// 執行遷移
 	fmt.Println("Running database migrations...")
-	err = database.DB.AutoMigrate(&models.User{}, &models.Task{}, &models.TaskGroup{})
+	err = database.DB.AutoMigrate(&models.User{}, &models.Task{}, &models.TaskGroup{}, &models.TaskExecutionLog{})
 	if err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}

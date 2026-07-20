@@ -37,7 +37,7 @@ func (s *TaskService) ListTasks(status, sortField, sortOrder string) ([]models.T
 
 	// 篩選條件
 	if status != "" {
-		query = query.Where("tasks.status = ?", status).Where("group.status = ? OR IS NULL", status)
+		query = query.Where("tasks.status = ?", status)
 	}
 
 	// 排序條件
@@ -52,6 +52,13 @@ func (s *TaskService) ListTasks(status, sortField, sortOrder string) ([]models.T
 	// 查詢結果
 	err := query.Preload("Group").Find(&tasks).Error
 	return tasks, err
+}
+
+// GetTask 取得單一任務
+func (s *TaskService) GetTask(id string) (*models.Task, error) {
+	var task models.Task
+	err := s.db.Preload("Group").First(&task, "id = ?", id).Error
+	return &task, err
 }
 
 func (s *TaskService) CreateTask(input models.CreateTaskReq) (*models.Task, error) {
@@ -102,7 +109,7 @@ func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models
 		UpdatedBy:   input.UserId,
 	}
 
-	if err := s.db.Save(task).Omit("CreatedAt").Error; err != nil {
+	if err := s.db.Omit("CreatedAt").Save(task).Error; err != nil {
 		errMsg := fmt.Sprintf("task: %T, db.Save err: %v", task, err)
 		return nil, errors.New(errMsg)
 	}
@@ -138,6 +145,20 @@ func (s *TaskService) DeleteTask(id string) error {
 	return nil
 }
 
+// ListTaskGroups 列出所有任務群組
+func (s *TaskService) ListTaskGroups() ([]models.TaskGroup, error) {
+	var groups []models.TaskGroup
+	err := s.db.Find(&groups).Error
+	return groups, err
+}
+
+// GetTaskGroup 取得單一任務群組
+func (s *TaskService) GetTaskGroup(id string) (*models.TaskGroup, error) {
+	var group models.TaskGroup
+	err := s.db.First(&group, "id = ?", id).Error
+	return &group, err
+}
+
 func (s *TaskService) CreateTaskGroup(input models.CreateTaskGroupReq) (*models.TaskGroup, error) {
 	group := &models.TaskGroup{
 		ID:          xid.New().String(),
@@ -164,7 +185,7 @@ func (s *TaskService) UpdateTaskGroup(id string, input models.UpdateTaskGroupReq
 		UpdatedBy:   input.UserId,
 	}
 
-	if err := s.db.Save(group).Omit("CreatedAt").Error; err != nil {
+	if err := s.db.Omit("CreatedAt").Save(group).Error; err != nil {
 		errMsg := fmt.Sprintf("task: %T, db.Save err: %v", group, err)
 		return nil, errors.New(errMsg)
 	}

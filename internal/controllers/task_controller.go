@@ -1,12 +1,14 @@
 package controllers
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/q90016200/scheduler-go/internal/app"
 	"github.com/q90016200/scheduler-go/internal/models"
 	"github.com/q90016200/scheduler-go/pkg/logger"
 	"github.com/q90016200/scheduler-go/pkg/response"
 	"github.com/q90016200/scheduler-go/pkg/utils"
+	"gorm.io/gorm"
 	"net/http"
 )
 
@@ -40,6 +42,27 @@ func (ctrl *TaskController) ListTasksHandler(c *gin.Context) {
 
 	// 取得任務清單的邏輯
 	response.Success(c, gin.H{"tasks": tasks}, "成功獲取任務清單")
+}
+
+// GetTaskHandler 取得單一任務
+func (ctrl *TaskController) GetTaskHandler(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		response.Fail(c, http.StatusBadRequest, "id is empty", nil)
+		return
+	}
+
+	task, err := ctrl.services.TaskServices.GetTask(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, http.StatusNotFound, "任務不存在", nil)
+			return
+		}
+		response.Fail(c, http.StatusInternalServerError, "取得任務失敗", err.Error())
+		return
+	}
+
+	response.Success(c, task, "成功獲取任務")
 }
 
 // CreateTaskHandler 建立任務
@@ -135,6 +158,37 @@ func (ctrl *TaskController) DeleteTaskHandler(c *gin.Context) {
 	}
 	response.Success(c, nil, "任務已刪除")
 	//c.JSON(http.StatusOK, gin.H{"message": "任務已刪除"})
+}
+
+// ListTaskGroupsHandler 列出所有任務群組
+func (ctrl *TaskController) ListTaskGroupsHandler(c *gin.Context) {
+	groups, err := ctrl.services.TaskServices.ListTaskGroups()
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, "取得任務群組清單失敗", err.Error())
+		return
+	}
+	response.Success(c, gin.H{"groups": groups}, "成功獲取任務群組清單")
+}
+
+// GetTaskGroupHandler 取得單一任務群組
+func (ctrl *TaskController) GetTaskGroupHandler(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		response.Fail(c, http.StatusBadRequest, "id is empty", nil)
+		return
+	}
+
+	group, err := ctrl.services.TaskServices.GetTaskGroup(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, http.StatusNotFound, "任務群組不存在", nil)
+			return
+		}
+		response.Fail(c, http.StatusInternalServerError, "取得任務群組失敗", err.Error())
+		return
+	}
+
+	response.Success(c, group, "成功獲取任務群組")
 }
 
 // CreateTaskGroupHandler 建立任務群組

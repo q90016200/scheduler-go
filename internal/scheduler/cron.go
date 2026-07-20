@@ -3,11 +3,13 @@ package scheduler
 import (
 	"fmt"
 	"github.com/go-resty/resty/v2"
+	"github.com/q90016200/scheduler-go/config"
 	"github.com/q90016200/scheduler-go/internal/models"
 	"github.com/q90016200/scheduler-go/pkg/logger"
 	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
 	"sync"
+	"time"
 )
 
 // CronScheduler 全局的排程器實例
@@ -69,6 +71,20 @@ func (cs *CronScheduler) StartScheduler() {
 	})
 	if err != nil {
 		cs.Log.Error(err, "Failed to scheduler cleanup task")
+	}
+
+	// 每日清除超過保留天數的任務執行紀錄
+	_, err = cs.Cron.AddFunc("0 3 * * *", func() {
+		cutoff := time.Now().AddDate(0, 0, -config.AppConfig.ExecutionLogRetentionDays).Unix()
+		result := cs.db.Where("created_at < ?", cutoff).Delete(&models.TaskExecutionLog{})
+		if result.Error != nil {
+			cs.Log.Error(result.Error, "清除過期執行紀錄失敗")
+			return
+		}
+		cs.Log.Info(fmt.Sprintf("已清除 %d 筆超過 %d 天的執行紀錄", result.RowsAffected, config.AppConfig.ExecutionLogRetentionDays))
+	})
+	if err != nil {
+		cs.Log.Error(err, "Failed to schedule execution log cleanup task")
 	}
 
 	cs.Cron.Start()

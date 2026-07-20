@@ -3,20 +3,24 @@ package config
 import (
 	"github.com/spf13/viper"
 	"log"
+	"strings"
 	"time"
 )
 
 // Config 定義應用程式配置
 type Config struct {
-	ServerPort   string
-	ServerDomain string
-	AppSecret    string
-	MySqlConfig  MysqlConfig
-	TokenExpiry  time.Duration
+	AppEnv                    string
+	ServerPort                string
+	ServerDomain              string
+	AppSecret                 string
+	PostgresConfig            PostgresConfig
+	TokenExpiry               time.Duration
+	CORSAllowOrigins          []string
+	ExecutionLogRetentionDays int
 }
 
-// MysqlConfig MySql 配置
-type MysqlConfig struct {
+// PostgresConfig PostgreSQL 配置
+type PostgresConfig struct {
 	Username string
 	Password string
 	Host     string
@@ -36,17 +40,39 @@ func LoadConfig(filePath string) {
 		log.Printf("沒有找到 .env 配置文件，將使用環境變數: %v", err)
 	}
 
+	appEnv := viper.GetString("APP_ENV")
+	if appEnv == "" {
+		appEnv = "development"
+	}
+
+	var corsAllowOrigins []string
+	if raw := viper.GetString("CORS_ALLOW_ORIGINS"); raw != "" {
+		for _, origin := range strings.Split(raw, ",") {
+			if origin = strings.TrimSpace(origin); origin != "" {
+				corsAllowOrigins = append(corsAllowOrigins, origin)
+			}
+		}
+	}
+
+	executionLogRetentionDays := viper.GetInt("EXECUTION_LOG_RETENTION_DAYS")
+	if executionLogRetentionDays <= 0 {
+		executionLogRetentionDays = 120
+	}
+
 	AppConfig = Config{
-		ServerPort:   viper.GetString("SERVER_PORT"),
-		ServerDomain: viper.GetString("SERVER_DOMAIN"),
-		AppSecret:    viper.GetString("APP_SECRET"),
-		TokenExpiry:  viper.GetDuration("TOKEN_EXPIRY"),
-		MySqlConfig: MysqlConfig{
-			Username: viper.GetString("MYSQL_USER"),
-			Password: viper.GetString("MYSQL_PASSWORD"),
-			Host:     viper.GetString("MYSQL_HOST"),
-			Port:     viper.GetString("MYSQL_PORT"),
-			Database: viper.GetString("MYSQL_DATABASE"),
+		AppEnv:                    appEnv,
+		ServerPort:                viper.GetString("SERVER_PORT"),
+		ServerDomain:              viper.GetString("SERVER_DOMAIN"),
+		AppSecret:                 viper.GetString("APP_SECRET"),
+		TokenExpiry:               viper.GetDuration("TOKEN_EXPIRY"),
+		CORSAllowOrigins:          corsAllowOrigins,
+		ExecutionLogRetentionDays: executionLogRetentionDays,
+		PostgresConfig: PostgresConfig{
+			Username: viper.GetString("POSTGRES_USER"),
+			Password: viper.GetString("POSTGRES_PASSWORD"),
+			Host:     viper.GetString("POSTGRES_HOST"),
+			Port:     viper.GetString("POSTGRES_PORT"),
+			Database: viper.GetString("POSTGRES_DATABASE"),
 		},
 	}
 }
