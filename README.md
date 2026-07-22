@@ -62,11 +62,13 @@ scheduler-tool/
 
 ## API 端點
 
-**Auth**（`/api/auth`）：`POST /register`、`POST /login`（設定 `auth_token` HttpOnly cookie）、`POST /logout`（需登入）、`GET /me`（需登入，取得目前使用者）。
+> **登入/註冊目前暫時停用**：`JWTAuthMiddleware` 未掛載在任何路由上，前端也拿掉了未登入導向 `/login` 的守衛，所有端點與頁面皆可直接使用，不需登入。以下「需登入」標註為停用前的原始設計，之後要恢復可參考 `internal/router/router.go`。
 
-**Task**（`/api/tasks`）：`GET /`（清單，可用 `status`/`sort_field`/`sort_order` 查詢參數）、`GET /:id`、`POST /`（需登入）、`PUT /:id`（需登入）、`DELETE /:id`（需登入）。
+**Auth**（`/api/auth`）：`POST /register`、`POST /login`（設定 `auth_token` HttpOnly cookie）、`POST /logout`、`GET /me`（取得目前使用者，需帶有效 cookie 才有意義）。
 
-**TaskGroup**（`/api/tasks/group`）：`GET /`、`GET /:id`、`POST /`（需登入）、`PUT /:id`（需登入）、`DELETE /:id`（需登入）。
+**Task**（`/api/tasks`）：`GET /`（清單，可用 `status`/`sort_field`/`sort_order` 查詢參數）、`GET /:id`、`POST /`、`PUT /:id`、`DELETE /:id`。
+
+**TaskGroup**（`/api/tasks/group`）：`GET /`、`GET /:id`、`POST /`、`PUT /:id`、`DELETE /:id`。
 
 **執行紀錄**（`/api/tasks/logs`）：`GET /`（可用 `task_id` 篩選，`limit`/`offset` 分頁）、`GET /:id`。
 

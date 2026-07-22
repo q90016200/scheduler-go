@@ -14,12 +14,12 @@ import (
 
 // CronScheduler 全局的排程器實例
 type CronScheduler struct {
-	Cron        *cron.Cron
-	Log         *logger.LogrusAdapter
-	jobIDs      map[string]cron.EntryID // 任務名稱與 EntryID 的映射
-	mu          sync.Mutex              // 保證多協程安全
-	db          *gorm.DB
-	restyClient *resty.Client
+	Cron             *cron.Cron
+	Log              *logger.LogrusAdapter
+	taskCronEntryIDs map[string]cron.EntryID // Task ID 對應其 cron EntryID 的映射
+	mu               sync.Mutex              // 保證多協程安全
+	db               *gorm.DB
+	restyClient      *resty.Client
 }
 
 func NewCronScheduler(db *gorm.DB) *CronScheduler {
@@ -27,11 +27,11 @@ func NewCronScheduler(db *gorm.DB) *CronScheduler {
 	log := logger.Log
 	cronLogger := &logger.LogrusAdapter{Logger: log}
 	return &CronScheduler{
-		Cron:        cron.New(cron.WithChain(cron.SkipIfStillRunning(cronLogger))),
-		Log:         cronLogger,
-		jobIDs:      make(map[string]cron.EntryID),
-		db:          db,
-		restyClient: resty.New(),
+		Cron:             cron.New(cron.WithChain(cron.SkipIfStillRunning(cronLogger))),
+		Log:              cronLogger,
+		taskCronEntryIDs: make(map[string]cron.EntryID),
+		db:               db,
+		restyClient:      resty.New(),
 	}
 }
 
@@ -39,7 +39,7 @@ func NewCronScheduler(db *gorm.DB) *CronScheduler {
 func (cs *CronScheduler) StartScheduler() {
 	// 建立每分鐘檢查任務狀態任務
 	_, err := cs.Cron.AddFunc("* * * * *", func() {
-		fmt.Println("[cron] Running cron scheduler jobs", cs.jobIDs)
+		fmt.Println("[cron] Running cron scheduler jobs", cs.taskCronEntryIDs)
 		var tasks []models.Task
 		err := cs.db.Where("status = ?", models.TASK_STATUS_ACTIVE).
 			Order("created_at ASC").
@@ -51,19 +51,19 @@ func (cs *CronScheduler) StartScheduler() {
 			return
 		}
 		for _, task := range tasks {
-			_, exists := cs.jobIDs[task.ID]
+			_, exists := cs.taskCronEntryIDs[task.ID]
 			if task.Status == models.TASK_STATUS_ACTIVE {
 				if !exists {
-					err = AddJob(cs, task.ID, &task)
+					err = RegisterTaskJob(cs, task.ID, &task)
 					if err != nil {
-						cs.Log.Info("task ID: " + task.ID + ", AddJob err:" + err.Error())
+						cs.Log.Info("task ID: " + task.ID + ", RegisterTaskJob err:" + err.Error())
 					}
 				}
 			} else {
 				if exists {
-					err = RemoveJob(cs, task.ID)
+					err = UnregisterTaskJob(cs, task.ID)
 					if err != nil {
-						cs.Log.Info("task ID: " + task.ID + ", RemoveJob err:" + err.Error())
+						cs.Log.Info("task ID: " + task.ID + ", UnregisterTaskJob err:" + err.Error())
 					}
 				}
 			}

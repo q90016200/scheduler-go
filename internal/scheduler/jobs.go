@@ -20,7 +20,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func AddJob(cs *CronScheduler, id string, task *models.Task) error {
+func RegisterTaskJob(cs *CronScheduler, id string, task *models.Task) error {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
@@ -44,20 +44,20 @@ func AddJob(cs *CronScheduler, id string, task *models.Task) error {
 	}
 
 	// 保存任務 ID
-	cs.Log.Info(fmt.Sprintf("新增 job: %s", task.ID))
-	cs.jobIDs[task.ID] = entryID
+	cs.Log.Info(fmt.Sprintf("已為 task %s 註冊 cron job", task.ID))
+	cs.taskCronEntryIDs[task.ID] = entryID
 
 	return nil
 }
 
-func RemoveJob(cs *CronScheduler, id string) error {
+func UnregisterTaskJob(cs *CronScheduler, id string) error {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
-	entryID, exists := cs.jobIDs[id]
+	entryID, exists := cs.taskCronEntryIDs[id]
 	if exists {
 		cs.Cron.Remove(entryID)
-		cs.Log.Info(fmt.Sprintf("Removed job: %s", id))
+		cs.Log.Info(fmt.Sprintf("已移除 task %s 的 cron job", id))
 	}
 
 	return nil
@@ -171,7 +171,7 @@ func RunRequestRpc(log *logger.LogrusAdapter, db *gorm.DB, task *models.Task) fu
 	}
 }
 
-// logExecution 寫入一筆任務執行紀錄，寫入失敗只記 log，不影響 job 本身
+// logExecution 寫入一筆任務執行紀錄，寫入失敗只記 log，不影響該 task 的 cron 排程本身
 // ponytail: 目前是同步寫入，若排程量大到 DB 寫入變瓶頸，再改成非同步/批次寫入
 func logExecution(db *gorm.DB, log *logger.LogrusAdapter, taskID string, startedAt int64, status, output, errMsg string) {
 	entry := &models.TaskExecutionLog{

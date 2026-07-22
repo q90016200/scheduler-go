@@ -30,7 +30,7 @@ Gin HTTP API + cron-based task scheduler, backed by PostgreSQL via GORM.
 
 **Validation**: `Task.Method`'s required format depends on `Task.Type` (e.g. `GET/POST/...` for `http`, `"pkg.Service/Method"` for `rpc`). This is enforced via a struct-level validator (`pkg/utils/validator.go`, `RegisterStructValidation(validateTaskMethod, ...)`) rather than per-field tags, since the constraint spans two fields.
 
-**Auth**: JWT stored in an `auth_token` cookie (not an `Authorization` header). `internal/auth/jwt.go` issues/parses tokens; `internal/middleware/auth_middleware.go` is the gin middleware guarding write routes (see `internal/router/router.go`).
+**Auth**: JWT stored in an `auth_token` cookie (not an `Authorization` header). `internal/auth/jwt.go` issues/parses tokens; `internal/middleware/auth_middleware.go` is the gin middleware that *would* guard write routes. **Currently disabled**: `JWTAuthMiddleware()` is not mounted anywhere in `internal/router/router.go`, and the frontend's login-redirect guard (`web/src/router/index.ts`) and `App.vue`'s logged-in-only shell were removed — all API routes and pages are open, temporarily, until login is re-enabled. The auth controller/service/store/views are untouched, so re-enabling is just re-adding the middleware calls and the router guard.
 
 **Response envelope**: all API responses go through `pkg/response.Success`/`Fail`, which wrap payloads in a `{code, message, data, error, trace}` shape and pull `trace_id` from gin context (set by `OpenTracingMiddleware`).
 

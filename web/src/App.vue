@@ -10,7 +10,7 @@ async function handleLogout() {
 </script>
 
 <template>
-  <el-container v-if="auth.isLoggedIn" class="app-shell">
+  <el-container class="app-shell">
     <el-header class="app-header">
       <el-menu mode="horizontal" router :ellipsis="false" class="app-menu">
         <el-menu-item index="/tasks">任務</el-menu-item>
@@ -26,7 +26,6 @@ async function handleLogout() {
       <router-view />
     </el-main>
   </el-container>
-  <router-view v-else />
 </template>
 
 <style scoped>

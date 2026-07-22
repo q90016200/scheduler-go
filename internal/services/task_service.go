@@ -84,7 +84,7 @@ func (s *TaskService) CreateTask(input models.CreateTaskReq) (*models.Task, erro
 
 	// 當是執行的放入 syncMap 內，供排程取得目前可執行 task 清單
 	if task.Status == models.TASK_STATUS_ACTIVE {
-		err := scheduler.AddJob(s.cronScheduler, task.ID, task)
+		err := scheduler.RegisterTaskJob(s.cronScheduler, task.ID, task)
 		if err != nil {
 			return nil, err
 		}
@@ -115,13 +115,13 @@ func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models
 	}
 
 	// 重新啟動排程任務
-	if err := scheduler.RemoveJob(s.cronScheduler, id); err != nil {
-		errMsg := fmt.Sprintf("task: %T, RemoveJob err: %v", task, err)
+	if err := scheduler.UnregisterTaskJob(s.cronScheduler, id); err != nil {
+		errMsg := fmt.Sprintf("task: %T, UnregisterTaskJob err: %v", task, err)
 		logger.Log.Error(errMsg)
 		return nil, err
 	}
-	if err := scheduler.AddJob(s.cronScheduler, id, task); err != nil {
-		errMsg := fmt.Sprintf("task: %T, AddJob err: %v", task, err)
+	if err := scheduler.RegisterTaskJob(s.cronScheduler, id, task); err != nil {
+		errMsg := fmt.Sprintf("task: %T, RegisterTaskJob err: %v", task, err)
 		logger.Log.Error(errMsg)
 		return nil, err
 	}
@@ -136,8 +136,8 @@ func (s *TaskService) DeleteTask(id string) error {
 		return err
 	}
 
-	if err := scheduler.RemoveJob(s.cronScheduler, id); err != nil {
-		errMsg := fmt.Sprintf("task id: %s, RemoveJob err: %v", id, err)
+	if err := scheduler.UnregisterTaskJob(s.cronScheduler, id); err != nil {
+		errMsg := fmt.Sprintf("task id: %s, UnregisterTaskJob err: %v", id, err)
 		logger.Log.Error(errMsg)
 		return err
 	}

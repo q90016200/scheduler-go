@@ -29,15 +29,15 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 	{
 		taskRoutes.GET("/", taskController.ListTasksHandler)
 		taskRoutes.GET("/:id", taskController.GetTaskHandler)
-		taskRoutes.POST("/", middleware.JWTAuthMiddleware(), taskController.CreateTaskHandler)
-		taskRoutes.PUT("/:id", middleware.JWTAuthMiddleware(), taskController.UpdateTaskHandler)
-		taskRoutes.DELETE("/:id", middleware.JWTAuthMiddleware(), taskController.DeleteTaskHandler)
+		taskRoutes.POST("/", taskController.CreateTaskHandler)
+		taskRoutes.PUT("/:id", taskController.UpdateTaskHandler)
+		taskRoutes.DELETE("/:id", taskController.DeleteTaskHandler)
 
 		taskRoutes.GET("/group/", taskController.ListTaskGroupsHandler)
 		taskRoutes.GET("/group/:id", taskController.GetTaskGroupHandler)
-		taskRoutes.POST("/group", middleware.JWTAuthMiddleware(), taskController.CreateTaskGroupHandler)
-		taskRoutes.PUT("/group/:id", middleware.JWTAuthMiddleware(), taskController.UpdateTaskGroupHandler)
-		taskRoutes.DELETE("/group/:id", middleware.JWTAuthMiddleware(), taskController.DeleteTaskGroupHandler)
+		taskRoutes.POST("/group", taskController.CreateTaskGroupHandler)
+		taskRoutes.PUT("/group/:id", taskController.UpdateTaskGroupHandler)
+		taskRoutes.DELETE("/group/:id", taskController.DeleteTaskGroupHandler)
 
 		taskRoutes.GET("/logs/", execLogController.ListLogsHandler)
 		taskRoutes.GET("/logs/:id", execLogController.GetLogHandler)
@@ -48,8 +48,8 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 	{
 		authRoutes.POST("/register", authController.RegisterHandler)
 		authRoutes.POST("/login", authController.LoginHandler)
-		authRoutes.POST("/logout", middleware.JWTAuthMiddleware(), authController.LogoutHandler)
-		authRoutes.GET("/me", middleware.JWTAuthMiddleware(), authController.MeHandler)
+		authRoutes.POST("/logout", authController.LogoutHandler)
+		authRoutes.GET("/me", authController.MeHandler)
 	}
 
 	testRoutes := api.Group("/test").Use(middleware.OpenTracingMiddleware())
