@@ -105,11 +105,10 @@ func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models
 		Method:      input.Method,
 		Payload:     input.Payload,
 		Status:      input.Status,
-		CreatedBy:   input.UserId,
 		UpdatedBy:   input.UserId,
 	}
 
-	if err := s.db.Omit("CreatedAt").Save(task).Error; err != nil {
+	if err := s.db.Omit("CreatedAt", "CreatedBy").Save(task).Error; err != nil {
 		errMsg := fmt.Sprintf("task: %T, db.Save err: %v", task, err)
 		return nil, errors.New(errMsg)
 	}
@@ -120,10 +119,12 @@ func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models
 		logger.Log.Error(errMsg)
 		return nil, err
 	}
-	if err := scheduler.RegisterTaskJob(s.cronScheduler, id, task); err != nil {
-		errMsg := fmt.Sprintf("task: %T, RegisterTaskJob err: %v", task, err)
-		logger.Log.Error(errMsg)
-		return nil, err
+	if task.Status == models.TASK_STATUS_ACTIVE {
+		if err := scheduler.RegisterTaskJob(s.cronScheduler, id, task); err != nil {
+			errMsg := fmt.Sprintf("task: %T, RegisterTaskJob err: %v", task, err)
+			logger.Log.Error(errMsg)
+			return nil, err
+		}
 	}
 
 	return task, nil
@@ -185,7 +186,7 @@ func (s *TaskService) UpdateTaskGroup(id string, input models.UpdateTaskGroupReq
 		UpdatedBy:   input.UserId,
 	}
 
-	if err := s.db.Omit("CreatedAt").Save(group).Error; err != nil {
+	if err := s.db.Omit("CreatedAt", "CreatedBy").Save(group).Error; err != nil {
 		errMsg := fmt.Sprintf("task: %T, db.Save err: %v", group, err)
 		return nil, errors.New(errMsg)
 	}

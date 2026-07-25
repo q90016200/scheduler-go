@@ -51,20 +51,9 @@ func (cs *CronScheduler) StartScheduler() {
 			return
 		}
 		for _, task := range tasks {
-			_, exists := cs.taskCronEntryIDs[task.ID]
-			if task.Status == models.TASK_STATUS_ACTIVE {
-				if !exists {
-					err = RegisterTaskJob(cs, task.ID, &task)
-					if err != nil {
-						cs.Log.Info("task ID: " + task.ID + ", RegisterTaskJob err:" + err.Error())
-					}
-				}
-			} else {
-				if exists {
-					err = UnregisterTaskJob(cs, task.ID)
-					if err != nil {
-						cs.Log.Info("task ID: " + task.ID + ", UnregisterTaskJob err:" + err.Error())
-					}
+			if _, exists := cs.taskCronEntryIDs[task.ID]; !exists {
+				if err := RegisterTaskJob(cs, task.ID, &task); err != nil {
+					cs.Log.Info("task ID: " + task.ID + ", RegisterTaskJob err:" + err.Error())
 				}
 			}
 		}

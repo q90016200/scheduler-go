@@ -30,17 +30,14 @@ func RegisterTaskJob(cs *CronScheduler, id string, task *models.Task) error {
 	switch task.Type {
 	case "http":
 		entryID, err = cs.Cron.AddFunc(task.Schedule, RunRequestHttp(cs.Log, cs.db, cs.restyClient, task))
-		if err != nil {
-			cs.Log.Error(err, fmt.Sprintf("failed to RunHttpGet job: %+v", task))
-		}
-
 	case "rpc":
 		entryID, err = cs.Cron.AddFunc(task.Schedule, RunRequestRpc(cs.Log, cs.db, task))
-		if err != nil {
-			cs.Log.Error(err, fmt.Sprintf("failed to RunRequestRpc job: %+v", task))
-		}
-
-		//case "shell":
+	default:
+		err = fmt.Errorf("unknown task type: %s", task.Type)
+	}
+	if err != nil {
+		cs.Log.Error(err, fmt.Sprintf("failed to register cron job: %+v", task))
+		return err
 	}
 
 	// 保存任務 ID
@@ -57,6 +54,7 @@ func UnregisterTaskJob(cs *CronScheduler, id string) error {
 	entryID, exists := cs.taskCronEntryIDs[id]
 	if exists {
 		cs.Cron.Remove(entryID)
+		delete(cs.taskCronEntryIDs, id)
 		cs.Log.Info(fmt.Sprintf("已移除 task %s 的 cron job", id))
 	}
 
