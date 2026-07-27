@@ -10,7 +10,14 @@ const routes = [
     component: () => import('../views/TaskExecutionHistoryView.vue'),
     props: true,
   },
+  { path: '/tasks/:id', name: 'task-detail', component: () => import('../views/TaskDetailView.vue'), props: true },
   { path: '/executions', name: 'all-executions', component: () => import('../views/AllExecutionsView.vue') },
+  {
+    path: '/executions/:id',
+    name: 'execution-detail',
+    component: () => import('../views/ExecutionLogDetailView.vue'),
+    props: true,
+  },
   { path: '/groups', name: 'groups', component: () => import('../views/TaskGroupListView.vue') },
   { path: '/groups/new', name: 'group-new', component: () => import('../views/TaskGroupFormView.vue') },
   {

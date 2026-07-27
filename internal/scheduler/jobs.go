@@ -47,6 +47,19 @@ func RegisterTaskJob(cs *CronScheduler, id string, task *models.Task) error {
 	return nil
 }
 
+// RunTaskNow 立即執行一次任務（不經過 cron 排程），沿用既有的執行與 logExecution 邏輯
+func RunTaskNow(cs *CronScheduler, task *models.Task) error {
+	switch task.Type {
+	case "http":
+		RunRequestHttp(cs.Log, cs.db, cs.restyClient, task)()
+	case "rpc":
+		RunRequestRpc(cs.Log, cs.db, task)()
+	default:
+		return fmt.Errorf("unknown task type: %s", task.Type)
+	}
+	return nil
+}
+
 func UnregisterTaskJob(cs *CronScheduler, id string) error {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()

@@ -30,14 +30,25 @@ var listTasksSortableFields = map[string]bool{
 	"schedule":   true,
 }
 
-// ListTasks 支持篩選與排序
-func (s *TaskService) ListTasks(status, sortField, sortOrder string) ([]models.Task, error) {
+// ListTasks 支持篩選、排序與分頁
+func (s *TaskService) ListTasks(status, groupID, name, sortField, sortOrder string, limit, offset int) ([]models.Task, int64, error) {
 	var tasks []models.Task
-	query := s.db
+	query := s.db.Model(&models.Task{})
 
 	// 篩選條件
 	if status != "" {
 		query = query.Where("tasks.status = ?", status)
+	}
+	if groupID != "" {
+		query = query.Where("tasks.group_id = ?", groupID)
+	}
+	if name != "" {
+		query = query.Where("tasks.name ILIKE ?", "%"+name+"%")
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
 	}
 
 	// 排序條件
@@ -50,8 +61,8 @@ func (s *TaskService) ListTasks(status, sortField, sortOrder string) ([]models.T
 	}
 
 	// 查詢結果
-	err := query.Preload("Group").Find(&tasks).Error
-	return tasks, err
+	err := query.Preload("Group").Limit(limit).Offset(offset).Find(&tasks).Error
+	return tasks, total, err
 }
 
 // GetTask 取得單一任務
@@ -130,6 +141,18 @@ func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models
 	return task, nil
 }
 
+// RunTaskNow 立即執行一次任務，不受排程狀態影響
+func (s *TaskService) RunTaskNow(id string) (*models.Task, error) {
+	task, err := s.GetTask(id)
+	if err != nil {
+		return nil, err
+	}
+	if err := scheduler.RunTaskNow(s.cronScheduler, task); err != nil {
+		return nil, err
+	}
+	return task, nil
+}
+
 func (s *TaskService) DeleteTask(id string) error {
 	if err := s.db.Where("id = ?", id).Delete(&models.Task{}).Error; err != nil {
 		errMsg := fmt.Sprintf("task id: %s, db.Delete err: %v", id, err)
@@ -146,11 +169,18 @@ func (s *TaskService) DeleteTask(id string) error {
 	return nil
 }
 
-// ListTaskGroups 列出所有任務群組
-func (s *TaskService) ListTaskGroups() ([]models.TaskGroup, error) {
+// ListTaskGroups 列出所有任務群組，支援分頁
+func (s *TaskService) ListTaskGroups(limit, offset int) ([]models.TaskGroup, int64, error) {
 	var groups []models.TaskGroup
-	err := s.db.Find(&groups).Error
-	return groups, err
+	query := s.db.Model(&models.TaskGroup{})
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	err := query.Limit(limit).Offset(offset).Find(&groups).Error
+	return groups, total, err
 }
 
 // GetTaskGroup 取得單一任務群組

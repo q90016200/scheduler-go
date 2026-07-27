@@ -32,6 +32,7 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 		taskRoutes.POST("/", taskController.CreateTaskHandler)
 		taskRoutes.PUT("/:id", taskController.UpdateTaskHandler)
 		taskRoutes.DELETE("/:id", taskController.DeleteTaskHandler)
+		taskRoutes.POST("/:id/run", taskController.RunTaskHandler)
 
 		taskRoutes.GET("/group/", taskController.ListTaskGroupsHandler)
 		taskRoutes.GET("/group/:id", taskController.GetTaskGroupHandler)

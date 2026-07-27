@@ -26,7 +26,8 @@ const form = reactive<TaskWriteDTO>({
 })
 
 onMounted(async () => {
-  groups.value = await listTaskGroups()
+  // ponytail: 下拉選單需要「全部群組」，用大 limit 取代真正的全量 API；群組數量大到 1000 筆時再改成搜尋式下拉
+  groups.value = (await listTaskGroups({ limit: 1000 })).groups
 })
 
 function validatePayload(): boolean {

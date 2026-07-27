@@ -61,3 +61,12 @@ func TestRegisterTaskJobUnknownType(t *testing.T) {
 		t.Fatal("expected no map entry for an unknown task type")
 	}
 }
+
+func TestRunTaskNowUnknownType(t *testing.T) {
+	cs := newTestScheduler()
+	task := &models.Task{ID: "t4", Type: "shell"}
+
+	if err := RunTaskNow(cs, task); err == nil {
+		t.Fatal("expected error for unknown task type")
+	}
+}

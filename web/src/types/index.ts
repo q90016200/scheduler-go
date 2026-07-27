@@ -84,3 +84,17 @@ export interface ListLogsResult {
   limit: number
   offset: number
 }
+
+export interface ListTasksResult {
+  tasks: Task[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface ListTaskGroupsResult {
+  groups: TaskGroup[]
+  total: number
+  limit: number
+  offset: number
+}

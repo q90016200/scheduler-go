@@ -1,7 +1,8 @@
 import http from './client'
-import type { TaskGroup, TaskGroupWriteDTO } from '../types'
+import type { ListTaskGroupsResult, TaskGroup, TaskGroupWriteDTO } from '../types'
 
-export const listTaskGroups = () => http.get<unknown, { groups: TaskGroup[] }>('/tasks/group/').then((res) => res.groups)
+export const listTaskGroups = (params?: { limit?: number; offset?: number }) =>
+  http.get<unknown, ListTaskGroupsResult>('/tasks/group/', { params })
 
 export const getTaskGroup = (id: string) => http.get<unknown, TaskGroup>(`/tasks/group/${id}`)
 

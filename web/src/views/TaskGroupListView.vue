@@ -8,9 +8,14 @@ import type { TaskGroup } from '../types'
 
 const router = useRouter()
 const groups = ref<TaskGroup[]>([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = 20
 
 async function load() {
-  groups.value = await listTaskGroups()
+  const result = await listTaskGroups({ limit: pageSize, offset: (page.value - 1) * pageSize })
+  groups.value = result.groups
+  total.value = result.total
 }
 
 onMounted(load)
@@ -42,6 +47,15 @@ async function handleDelete(group: TaskGroup) {
         </template>
       </el-table-column>
     </el-table>
+
+    <el-pagination
+      v-model:current-page="page"
+      :page-size="pageSize"
+      :total="total"
+      layout="prev, pager, next"
+      style="margin-top: 16px"
+      @current-change="load"
+    />
   </el-card>
 </template>
 

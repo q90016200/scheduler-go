@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router'
 import StatusTag from './StatusTag.vue'
 import type { ExecutionLog } from '../types'
 
 defineProps<{ logs: ExecutionLog[] }>()
+const router = useRouter()
 
 function formatTime(unixSeconds: number) {
   if (!unixSeconds) return '-'
@@ -23,5 +25,10 @@ function formatTime(unixSeconds: number) {
     </el-table-column>
     <el-table-column prop="output" label="輸出" show-overflow-tooltip />
     <el-table-column prop="error_message" label="錯誤訊息" show-overflow-tooltip />
+    <el-table-column label="操作" width="100">
+      <template #default="{ row }">
+        <el-button size="small" @click="router.push(`/executions/${row.id}`)">詳情</el-button>
+      </template>
+    </el-table-column>
   </el-table>
 </template>
