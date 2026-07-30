@@ -47,13 +47,56 @@ scheduler-tool/
 
 ```
 
+## 快速開始
+
+1. **設定環境變數**
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   預設值已對應下一步 docker-compose 起的 postgres（`schedule_go` / `postgres` / `postgres` / 5432），本機開發可直接使用不需修改。
+
+2. **啟動資料庫**
+
+   ```bash
+   cd docker
+   docker compose up -d
+   ```
+
+   會啟動 `postgres:16`（5432，資料存放於 `docker/postgres/data`）與 `redis`（6379，目前程式尚未使用，可自行從 `docker-compose.yaml` 註解掉）。要停止則執行 `docker compose down`。
+
+3. **執行資料庫遷移**
+
+   回到 repo 根目錄執行（`migrate.go` 讀取的是根目錄的 `.env`，必須在此路徑下跑）：
+
+   ```bash
+   go run cmd/migrate/migrate.go
+   ```
+
+   會自動建立/更新 `User`、`Task`、`TaskGroup`、`TaskExecutionLog` 四張表，schema 有異動時重跑即可。
+
+4. **啟動後端**
+
+   ```bash
+   go run main.go
+   ```
+
+   監聽 `SERVER_PORT`（預設 `8080`）。啟動後 cron 排程器會每分鐘掃描 `status = active` 的任務並執行。
+
+5. **啟動前端**
+
+   參考下方「前端開發」段落，`cd web && npm install && npm run dev`，開發伺服器預設在 http://localhost:5173。
+
 ## 環境變數 (.env)
 
 | 變數 | 說明 | 預設 |
 |---|---|---|
+| `GIN_MODE` | Gin 執行模式（`debug`/`release`） | `debug` |
 | `APP_ENV` | `development` 時才會掛載 CORS middleware（正式環境同源部署不需要） | `development` |
 | `SERVER_PORT` | Gin 監聽埠 | - |
 | `SERVER_DOMAIN` | cookie 的 domain | - |
+| `TASK_ENABLED` | 是否啟用 cron 排程器 | `true` |
 | `APP_SECRET` | JWT 簽章金鑰 | - |
 | `TOKEN_EXPIRY` | JWT/cookie 有效秒數 | - |
 | `CORS_ALLOW_ORIGINS` | 開發模式允許的前端來源，逗號分隔 | 空 |
