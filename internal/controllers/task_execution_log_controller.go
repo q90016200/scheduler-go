@@ -21,6 +21,8 @@ func NewTaskExecutionLogController(services *app.AppServices) *TaskExecutionLogC
 // ListLogsHandler 列出執行紀錄，可用 task_id 篩選單一任務，limit/offset 分頁
 func (ctrl *TaskExecutionLogController) ListLogsHandler(c *gin.Context) {
 	taskID := c.Query("task_id")
+	taskName := c.Query("task_name")
+	groupID := c.Query("group_id")
 
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	if limit <= 0 || limit > 100 {
@@ -31,7 +33,7 @@ func (ctrl *TaskExecutionLogController) ListLogsHandler(c *gin.Context) {
 		offset = 0
 	}
 
-	logs, total, err := ctrl.services.TaskExecutionLogService.ListLogs(taskID, limit, offset)
+	logs, total, err := ctrl.services.TaskExecutionLogService.ListLogs(taskID, taskName, groupID, limit, offset)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, "取得執行紀錄失敗", err.Error())
 		return

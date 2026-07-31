@@ -221,6 +221,26 @@ func (s *TaskService) UpdateTaskGroup(id string, input models.UpdateTaskGroupReq
 		return nil, errors.New(errMsg)
 	}
 
+	// 群組停用時連動停用底下仍為 active 的任務並取消排程；改回啟用不自動恢復子任務
+	if input.Status == models.TASK_STATUS_INACTIVE {
+		var tasks []models.Task
+		if err := s.db.Where("group_id = ? AND status = ?", id, models.TASK_STATUS_ACTIVE).Find(&tasks).Error; err != nil {
+			return nil, err
+		}
+		if len(tasks) > 0 {
+			if err := s.db.Model(&models.Task{}).
+				Where("group_id = ? AND status = ?", id, models.TASK_STATUS_ACTIVE).
+				Update("status", models.TASK_STATUS_INACTIVE).Error; err != nil {
+				return nil, err
+			}
+			for _, task := range tasks {
+				if err := scheduler.UnregisterTaskJob(s.cronScheduler, task.ID); err != nil {
+					logger.Log.Error(fmt.Sprintf("group id: %s, task id: %s, UnregisterTaskJob err: %v", id, task.ID, err))
+				}
+			}
+		}
+	}
+
 	return group, nil
 }
 

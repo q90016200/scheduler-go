@@ -76,6 +76,7 @@ export interface ExecutionLog {
   output?: string
   error_message?: string
   created_at: number
+  task?: Task
 }
 
 export interface ListLogsResult {

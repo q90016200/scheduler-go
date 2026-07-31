@@ -13,4 +13,5 @@ type TaskExecutionLog struct {
 	Output     string `json:"output" gorm:"column:output;type:jsonb"`
 	ErrMessage string `json:"error_message" gorm:"column:error_message"`
 	CreatedAt  int64  `json:"created_at" gorm:"column:created_at;autoCreateTime;<-:create"`
+	Task       *Task  `json:"task,omitempty" gorm:"foreignKey:TaskID;references:ID"`
 }

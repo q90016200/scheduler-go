@@ -3,7 +3,7 @@ import { useRouter } from 'vue-router'
 import StatusTag from './StatusTag.vue'
 import type { ExecutionLog } from '../types'
 
-defineProps<{ logs: ExecutionLog[] }>()
+withDefaults(defineProps<{ logs: ExecutionLog[]; showTask?: boolean }>(), { showTask: true })
 const router = useRouter()
 
 function formatTime(unixSeconds: number) {
@@ -14,6 +14,8 @@ function formatTime(unixSeconds: number) {
 
 <template>
   <el-table :data="logs" style="width: 100%">
+    <el-table-column v-if="showTask" prop="task.name" label="任務名稱" />
+    <el-table-column v-if="showTask" prop="task.group.name" label="群組" />
     <el-table-column label="狀態" width="100">
       <template #default="{ row }"><StatusTag :status="row.status" /></template>
     </el-table-column>

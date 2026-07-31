@@ -30,6 +30,8 @@ onMounted(load)
 
     <el-descriptions :column="2" border>
       <el-descriptions-item label="狀態"><StatusTag :status="log.status" /></el-descriptions-item>
+      <el-descriptions-item label="任務名稱">{{ log.task?.name || '-' }}</el-descriptions-item>
+      <el-descriptions-item label="群組">{{ log.task?.group?.name || '-' }}</el-descriptions-item>
       <el-descriptions-item label="任務 ID">{{ log.task_id }}</el-descriptions-item>
       <el-descriptions-item label="開始時間">{{ formatTime(log.started_at) }}</el-descriptions-item>
       <el-descriptions-item label="結束時間">{{ formatTime(log.finished_at) }}</el-descriptions-item>

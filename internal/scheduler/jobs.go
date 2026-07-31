@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -13,6 +12,7 @@ import (
 	"github.com/jhump/protoreflect/grpcreflect"
 	"github.com/q90016200/scheduler-go/internal/models"
 	"github.com/q90016200/scheduler-go/pkg/logger"
+	"github.com/q90016200/scheduler-go/pkg/utils"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/xid"
 	"google.golang.org/grpc"
@@ -120,7 +120,7 @@ func RunRequestRpc(log *logger.LogrusAdapter, db *gorm.DB, task *models.Task) fu
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		serviceName, methodName, err := splitRpcMethod(task.Method)
+		serviceName, methodName, err := utils.SplitRpcMethod(task.Method)
 		if err != nil {
 			log.Info(fmt.Sprintf("task: %+v \n RunRequestRpc invalid method: %v", task, err))
 			logExecution(db, log, task.ID, startedAt, models.EXEC_STATUS_FAILED, "", err.Error())
@@ -214,14 +214,4 @@ func toJSONColumn(output string) string {
 	}
 	wrapped, _ := json.Marshal(map[string]string{"raw": output})
 	return string(wrapped)
-}
-
-// splitRpcMethod 將 "package.Service/MethodName"（允許帶前導 "/"）拆成 service 全名與方法名稱。
-func splitRpcMethod(method string) (serviceName string, methodName string, err error) {
-	method = strings.TrimPrefix(method, "/")
-	idx := strings.LastIndex(method, "/")
-	if idx <= 0 || idx == len(method)-1 {
-		return "", "", fmt.Errorf("method must be in the form \"package.Service/MethodName\", got %q", method)
-	}
-	return method[:idx], method[idx+1:], nil
 }

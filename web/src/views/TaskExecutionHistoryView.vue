@@ -9,11 +9,17 @@ const logs = ref<ExecutionLog[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = 20
+const loading = ref(false)
 
 async function load() {
-  const result = await listExecutionLogs({ task_id: props.id, limit: pageSize, offset: (page.value - 1) * pageSize })
-  logs.value = result.logs
-  total.value = result.total
+  loading.value = true
+  try {
+    const result = await listExecutionLogs({ task_id: props.id, limit: pageSize, offset: (page.value - 1) * pageSize })
+    logs.value = result.logs
+    total.value = result.total
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(load)
@@ -21,8 +27,11 @@ onMounted(load)
 
 <template>
   <el-card>
-    <h2>任務執行紀錄</h2>
-    <ExecutionLogTable :logs="logs" />
+    <div class="toolbar">
+      <h2>任務執行紀錄</h2>
+      <el-button :loading="loading" @click="load">重新整理</el-button>
+    </div>
+    <ExecutionLogTable :logs="logs" :show-task="false" />
     <el-pagination
       v-model:current-page="page"
       :page-size="pageSize"
@@ -33,3 +42,12 @@ onMounted(load)
     />
   </el-card>
 </template>
+
+<style scoped>
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+</style>

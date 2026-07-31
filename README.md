@@ -111,9 +111,9 @@ scheduler-tool/
 
 **Task**（`/api/tasks`）：`GET /`（清單，可用 `status`/`sort_field`/`sort_order` 查詢參數）、`GET /:id`、`POST /`、`PUT /:id`、`DELETE /:id`。
 
-**TaskGroup**（`/api/tasks/group`）：`GET /`、`GET /:id`、`POST /`、`PUT /:id`、`DELETE /:id`。
+**TaskGroup**（`/api/tasks/group`）：`GET /`、`GET /:id`、`POST /`、`PUT /:id`、`DELETE /:id`。將群組 `PUT` 成 `inactive` 會連動把該群組底下仍為 `active` 的任務改成 `inactive` 並取消排程；改回 `active` 不會自動恢復子任務，需個別開啟。
 
-**執行紀錄**（`/api/tasks/logs`）：`GET /`（可用 `task_id` 篩選，`limit`/`offset` 分頁）、`GET /:id`。
+**執行紀錄**（`/api/tasks/logs`）：`GET /`（可用 `task_id`/`task_name`/`group_id` 篩選，`limit`/`offset` 分頁，回傳每筆會帶 `task.name`/`task.group.name`）、`GET /:id`（同樣帶 `task` 資訊）。
 
 ## 前端開發
 

@@ -11,11 +11,17 @@ const groups = ref<TaskGroup[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = 20
+const loading = ref(false)
 
 async function load() {
-  const result = await listTaskGroups({ limit: pageSize, offset: (page.value - 1) * pageSize })
-  groups.value = result.groups
-  total.value = result.total
+  loading.value = true
+  try {
+    const result = await listTaskGroups({ limit: pageSize, offset: (page.value - 1) * pageSize })
+    groups.value = result.groups
+    total.value = result.total
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(load)
@@ -32,6 +38,7 @@ async function handleDelete(group: TaskGroup) {
   <el-card>
     <div class="toolbar">
       <el-button type="primary" @click="router.push('/groups/new')">新增群組</el-button>
+      <el-button :loading="loading" @click="load">重新整理</el-button>
     </div>
 
     <el-table :data="groups" style="width: 100%">

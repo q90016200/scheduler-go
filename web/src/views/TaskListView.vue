@@ -2,13 +2,14 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import StatusTag from '../components/StatusTag.vue'
 import TaskForm from '../components/TaskForm.vue'
 import { createTask, deleteTask, listTasks, runTask, updateTask } from '../api/tasks'
 import { listTaskGroups } from '../api/taskGroups'
-import type { SortField, SortOrder, Task, TaskGroup, TaskWriteDTO } from '../types'
+import { useAuthStore } from '../stores/auth'
+import type { ActiveStatus, SortField, SortOrder, Task, TaskGroup, TaskWriteDTO } from '../types'
 
 const router = useRouter()
+const auth = useAuthStore()
 const tasks = ref<Task[]>([])
 const groups = ref<TaskGroup[]>([])
 const total = ref(0)
@@ -19,6 +20,8 @@ const dialogVisible = ref(false)
 const editingTask = ref<Task>()
 const saving = ref(false)
 const runningIds = ref(new Set<string>())
+const statusUpdatingIds = ref(new Set<string>())
+const loading = ref(false)
 const formRef = ref<InstanceType<typeof TaskForm>>()
 const filters = reactive<{ name: string; groupId: string; status: string; sort_field: SortField | ''; sort_order: SortOrder }>({
   name: '',
@@ -29,17 +32,22 @@ const filters = reactive<{ name: string; groupId: string; status: string; sort_f
 })
 
 async function load() {
-  const result = await listTasks({
-    status: filters.status || undefined,
-    group_id: filters.groupId || undefined,
-    name: filters.name || undefined,
-    sort_field: filters.sort_field || undefined,
-    sort_order: filters.sort_order,
-    limit: pageSize,
-    offset: (page.value - 1) * pageSize,
-  })
-  tasks.value = result.tasks
-  total.value = result.total
+  loading.value = true
+  try {
+    const result = await listTasks({
+      status: filters.status || undefined,
+      group_id: filters.groupId || undefined,
+      name: filters.name || undefined,
+      sort_field: filters.sort_field || undefined,
+      sort_order: filters.sort_order,
+      limit: pageSize,
+      offset: (page.value - 1) * pageSize,
+    })
+    tasks.value = result.tasks
+    total.value = result.total
+  } finally {
+    loading.value = false
+  }
 }
 
 function reloadFromFirstPage() {
@@ -69,6 +77,30 @@ async function handleRun(task: Task) {
     ElMessage.error((err as Error).message || '觸發執行失敗')
   } finally {
     runningIds.value.delete(task.id)
+  }
+}
+
+async function handleStatusChange(task: Task, status: ActiveStatus) {
+  statusUpdatingIds.value.add(task.id)
+  try {
+    await updateTask(task.id, {
+      group_id: task.group_id,
+      name: task.name,
+      description: task.description,
+      schedule: task.schedule,
+      type: task.type,
+      endpoint: task.endpoint,
+      method: task.method,
+      payload: task.payload,
+      status,
+      user_id: auth.user?.id ?? '',
+    })
+    ElMessage.success('狀態已更新')
+    await load()
+  } catch (err) {
+    ElMessage.error((err as Error).message || '狀態更新失敗')
+  } finally {
+    statusUpdatingIds.value.delete(task.id)
   }
 }
 
@@ -124,6 +156,7 @@ async function handleSubmit(payload: TaskWriteDTO) {
         <el-option label="倒序" value="desc" />
       </el-select>
       <el-button type="primary" @click="openCreate">新增任務</el-button>
+      <el-button :loading="loading" @click="load">重新整理</el-button>
     </div>
 
     <el-table :data="tasks" style="width: 100%">
@@ -131,8 +164,18 @@ async function handleSubmit(payload: TaskWriteDTO) {
       <el-table-column prop="group.name" label="群組" />
       <el-table-column prop="type" label="類型" width="80" />
       <el-table-column prop="schedule" label="排程" />
-      <el-table-column label="狀態" width="100">
-        <template #default="{ row }"><StatusTag :status="row.status" /></template>
+      <el-table-column label="狀態" width="140">
+        <template #default="{ row }">
+          <el-switch
+            :model-value="row.status"
+            active-value="active"
+            inactive-value="inactive"
+            active-text="啟用"
+            inactive-text="停用"
+            :loading="statusUpdatingIds.has(row.id)"
+            @change="(val: ActiveStatus) => handleStatusChange(row, val)"
+          />
+        </template>
       </el-table-column>
       <el-table-column label="操作" width="320">
         <template #default="{ row }">

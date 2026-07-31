@@ -41,8 +41,22 @@ func validateTaskMethod(sl validator.StructLevel) {
 	case "rpc":
 		if method == "" {
 			sl.ReportError(methodField.Interface(), "Method", "Method", "required", "")
+			return
+		}
+		if _, _, err := SplitRpcMethod(method); err != nil {
+			sl.ReportError(methodField.Interface(), "Method", "Method", "rpc_method_format", "")
 		}
 	}
+}
+
+// SplitRpcMethod 將 "package.Service/MethodName"（允許帶前導 "/"）拆成 service 全名與方法名稱。
+func SplitRpcMethod(method string) (serviceName string, methodName string, err error) {
+	method = strings.TrimPrefix(method, "/")
+	idx := strings.LastIndex(method, "/")
+	if idx <= 0 || idx == len(method)-1 {
+		return "", "", fmt.Errorf("method must be in the form \"package.Service/MethodName\", got %q", method)
+	}
+	return method[:idx], method[idx+1:], nil
 }
 
 // FormatValidationErrors 將 validator.ValidationErrors 轉成前端可逐欄位解析的結構化陣列

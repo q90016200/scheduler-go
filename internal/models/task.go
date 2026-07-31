@@ -12,7 +12,7 @@ type Task struct {
 	Schedule    string     `json:"schedule" gorm:"column:schedule"`
 	Type        string     `json:"type" gorm:"column:type;size:20"`
 	Endpoint    string     `json:"endpoint" gorm:"column:endpoint"`
-	Method      string     `json:"method" gorm:"column:method;size:10"`
+	Method      string     `json:"method" gorm:"column:method;size:255"`
 	Payload     string     `json:"payload" gorm:"column:payload"`
 	Status      string     `json:"status" gorm:"column:status;size:10"` // 狀態 ('active', 'inactive')
 	CreatedBy   string     `json:"created_by" gorm:"column:created_by"`
