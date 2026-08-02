@@ -30,6 +30,13 @@ var listTasksSortableFields = map[string]bool{
 	"schedule":   true,
 }
 
+// listTaskGroupsSortableFields 群組排序欄位白名單，理由同 listTasksSortableFields
+var listTaskGroupsSortableFields = map[string]bool{
+	"name":       true,
+	"created_at": true,
+	"status":     true,
+}
+
 // ListTasks 支持篩選、排序與分頁
 func (s *TaskService) ListTasks(status, groupID, name, sortField, sortOrder string, limit, offset int) ([]models.Task, int64, error) {
 	var tasks []models.Task
@@ -95,14 +102,20 @@ func (s *TaskService) CreateTask(input models.CreateTaskReq) (*models.Task, erro
 
 	// 當是執行的放入 syncMap 內，供排程取得目前可執行 task 清單
 	if task.Status == models.TASK_STATUS_ACTIVE {
-		err := scheduler.RegisterTaskJob(s.cronScheduler, task.ID, task)
-		if err != nil {
+		if err := scheduler.RegisterTaskJob(s.cronScheduler, task.ID, task); err != nil {
+			// 註冊排程失敗，不留下無法排程的孤兒資料
+			if delErr := s.db.Delete(&models.Task{}, "id = ?", task.ID).Error; delErr != nil {
+				logger.Log.Errorf("task id: %s, 註冊排程失敗後清理孤兒資料也失敗: %v", task.ID, delErr)
+			}
 			return nil, err
 		}
 	}
 
 	return task, nil
 }
+
+// taskUpdatableColumns UpdateTask 允許更新的欄位，排除 created_at/created_by
+var taskUpdatableColumns = []string{"group_id", "name", "description", "schedule", "type", "endpoint", "method", "payload", "status", "updated_by"}
 
 func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models.Task, error) {
 	task := &models.Task{
@@ -119,9 +132,13 @@ func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models
 		UpdatedBy:   input.UserId,
 	}
 
-	if err := s.db.Omit("CreatedAt", "CreatedBy").Save(task).Error; err != nil {
-		errMsg := fmt.Sprintf("task: %T, db.Save err: %v", task, err)
+	result := s.db.Model(&models.Task{}).Where("id = ?", id).Select(taskUpdatableColumns).Updates(task)
+	if result.Error != nil {
+		errMsg := fmt.Sprintf("task: %T, db.Updates err: %v", task, result.Error)
 		return nil, errors.New(errMsg)
+	}
+	if result.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
 	}
 
 	// 重新啟動排程任務
@@ -141,6 +158,41 @@ func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models
 	return task, nil
 }
 
+// UpdateTaskStatus 只切換任務啟用/停用狀態並對應 register/unregister cron job，
+// 不需要像 UpdateTask 一樣送整包任務資料
+func (s *TaskService) UpdateTaskStatus(id, status, userId string) (*models.Task, error) {
+	var task models.Task
+	if err := s.db.First(&task, "id = ?", id).Error; err != nil {
+		return nil, err
+	}
+
+	result := s.db.Model(&models.Task{}).Where("id = ?", id).
+		Updates(map[string]interface{}{"status": status, "updated_by": userId})
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	task.Status = status
+	task.UpdatedBy = userId
+
+	if err := scheduler.UnregisterTaskJob(s.cronScheduler, id); err != nil {
+		errMsg := fmt.Sprintf("task: %T, UnregisterTaskJob err: %v", task, err)
+		logger.Log.Error(errMsg)
+		return nil, err
+	}
+	if status == models.TASK_STATUS_ACTIVE {
+		if err := scheduler.RegisterTaskJob(s.cronScheduler, id, &task); err != nil {
+			errMsg := fmt.Sprintf("task: %T, RegisterTaskJob err: %v", task, err)
+			logger.Log.Error(errMsg)
+			return nil, err
+		}
+	}
+
+	return &task, nil
+}
+
 // RunTaskNow 立即執行一次任務，不受排程狀態影響
 func (s *TaskService) RunTaskNow(id string) (*models.Task, error) {
 	task, err := s.GetTask(id)
@@ -154,10 +206,13 @@ func (s *TaskService) RunTaskNow(id string) (*models.Task, error) {
 }
 
 func (s *TaskService) DeleteTask(id string) error {
-	if err := s.db.Where("id = ?", id).Delete(&models.Task{}).Error; err != nil {
-		errMsg := fmt.Sprintf("task id: %s, db.Delete err: %v", id, err)
-		logger.Log.Error(errMsg)
-		return err
+	result := s.db.Where("id = ?", id).Delete(&models.Task{})
+	if result.Error != nil {
+		logger.Log.Errorf("task id: %s, db.Delete err: %v", id, result.Error)
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
 	}
 
 	if err := scheduler.UnregisterTaskJob(s.cronScheduler, id); err != nil {
@@ -169,14 +224,29 @@ func (s *TaskService) DeleteTask(id string) error {
 	return nil
 }
 
-// ListTaskGroups 列出所有任務群組，支援分頁
-func (s *TaskService) ListTaskGroups(limit, offset int) ([]models.TaskGroup, int64, error) {
+// ListTaskGroups 支援篩選（name 模糊比對、status）、排序與分頁
+func (s *TaskService) ListTaskGroups(status, name, sortField, sortOrder string, limit, offset int) ([]models.TaskGroup, int64, error) {
 	var groups []models.TaskGroup
 	query := s.db.Model(&models.TaskGroup{})
+
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if name != "" {
+		query = query.Where("name ILIKE ?", "%"+name+"%")
+	}
 
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
+	}
+
+	if listTaskGroupsSortableFields[sortField] {
+		order := "ASC"
+		if sortOrder == "desc" {
+			order = "DESC"
+		}
+		query = query.Order(sortField + " " + order)
 	}
 
 	err := query.Limit(limit).Offset(offset).Find(&groups).Error
@@ -207,6 +277,32 @@ func (s *TaskService) CreateTaskGroup(input models.CreateTaskGroupReq) (*models.
 	return group, nil
 }
 
+// deactivateGroupTasksTx 在交易內找出群組底下仍為 active 的任務並批次轉為 inactive，
+// 回傳被停用的任務清單（供呼叫端在交易 commit 後取消其 cron 排程）
+func (s *TaskService) deactivateGroupTasksTx(tx *gorm.DB, groupID string) ([]models.Task, error) {
+	var tasks []models.Task
+	if err := tx.Where("group_id = ? AND status = ?", groupID, models.TASK_STATUS_ACTIVE).Find(&tasks).Error; err != nil {
+		return nil, err
+	}
+	if len(tasks) > 0 {
+		if err := tx.Model(&models.Task{}).
+			Where("group_id = ? AND status = ?", groupID, models.TASK_STATUS_ACTIVE).
+			Update("status", models.TASK_STATUS_INACTIVE).Error; err != nil {
+			return nil, err
+		}
+	}
+	return tasks, nil
+}
+
+// unregisterTasks 取消一批任務的 cron 排程（純記憶體操作，於交易 commit 後呼叫）
+func (s *TaskService) unregisterTasks(tasks []models.Task, context string) {
+	for _, task := range tasks {
+		if err := scheduler.UnregisterTaskJob(s.cronScheduler, task.ID); err != nil {
+			logger.Log.Errorf("%s, task id: %s, UnregisterTaskJob err: %v", context, task.ID, err)
+		}
+	}
+}
+
 func (s *TaskService) UpdateTaskGroup(id string, input models.UpdateTaskGroupReq) (*models.TaskGroup, error) {
 	group := &models.TaskGroup{
 		ID:          id,
@@ -216,40 +312,68 @@ func (s *TaskService) UpdateTaskGroup(id string, input models.UpdateTaskGroupReq
 		UpdatedBy:   input.UserId,
 	}
 
-	if err := s.db.Omit("CreatedAt", "CreatedBy").Save(group).Error; err != nil {
-		errMsg := fmt.Sprintf("task: %T, db.Save err: %v", group, err)
-		return nil, errors.New(errMsg)
-	}
+	var deactivated []models.Task
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&models.TaskGroup{}).Where("id = ?", id).
+			Select("name", "description", "status", "updated_by").
+			Updates(group)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
 
-	// 群組停用時連動停用底下仍為 active 的任務並取消排程；改回啟用不自動恢復子任務
-	if input.Status == models.TASK_STATUS_INACTIVE {
-		var tasks []models.Task
-		if err := s.db.Where("group_id = ? AND status = ?", id, models.TASK_STATUS_ACTIVE).Find(&tasks).Error; err != nil {
+		// 群組停用時連動停用底下仍為 active 的任務；改回啟用不自動恢復子任務
+		if input.Status == models.TASK_STATUS_INACTIVE {
+			tasks, err := s.deactivateGroupTasksTx(tx, id)
+			if err != nil {
+				return err
+			}
+			deactivated = tasks
+		}
+		return nil
+	})
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, err
 		}
-		if len(tasks) > 0 {
-			if err := s.db.Model(&models.Task{}).
-				Where("group_id = ? AND status = ?", id, models.TASK_STATUS_ACTIVE).
-				Update("status", models.TASK_STATUS_INACTIVE).Error; err != nil {
-				return nil, err
-			}
-			for _, task := range tasks {
-				if err := scheduler.UnregisterTaskJob(s.cronScheduler, task.ID); err != nil {
-					logger.Log.Error(fmt.Sprintf("group id: %s, task id: %s, UnregisterTaskJob err: %v", id, task.ID, err))
-				}
-			}
-		}
+		return nil, fmt.Errorf("task group: %T, update err: %w", group, err)
 	}
+
+	s.unregisterTasks(deactivated, fmt.Sprintf("group id: %s", id))
 
 	return group, nil
 }
 
-func (s *TaskService) DeleteTaskGroup(id string) error {
-	if err := s.db.Where("id = ?", id).Delete(&models.TaskGroup{}).Error; err != nil {
-		errMsg := fmt.Sprintf("task id: %s, db.Delete err: %v", id, err)
-		logger.Log.Error(errMsg)
-		return err
+// DeleteTaskGroup 刪除群組前連動停用底下仍為 active 的任務並取消其排程，
+// 回傳被停用的任務清單供 API 回應提示使用者
+func (s *TaskService) DeleteTaskGroup(id string) ([]models.Task, error) {
+	var deactivated []models.Task
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		tasks, err := s.deactivateGroupTasksTx(tx, id)
+		if err != nil {
+			return err
+		}
+		deactivated = tasks
+
+		result := tx.Where("id = ?", id).Delete(&models.TaskGroup{})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("task group id: %s, delete err: %w", id, err)
 	}
 
-	return nil
+	s.unregisterTasks(deactivated, fmt.Sprintf("group id: %s deleted", id))
+
+	return deactivated, nil
 }

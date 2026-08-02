@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/q90016200/scheduler-go/internal/app"
+	"github.com/q90016200/scheduler-go/pkg/logger"
 	"github.com/q90016200/scheduler-go/pkg/response"
 	"gorm.io/gorm"
 	"net/http"
@@ -35,7 +36,8 @@ func (ctrl *TaskExecutionLogController) ListLogsHandler(c *gin.Context) {
 
 	logs, total, err := ctrl.services.TaskExecutionLogService.ListLogs(taskID, taskName, groupID, limit, offset)
 	if err != nil {
-		response.Fail(c, http.StatusInternalServerError, "取得執行紀錄失敗", err.Error())
+		logger.WithTrace(c).Error(err.Error())
+		response.Fail(c, http.StatusInternalServerError, "取得執行紀錄失敗", nil)
 		return
 	}
 
@@ -50,15 +52,16 @@ func (ctrl *TaskExecutionLogController) GetLogHandler(c *gin.Context) {
 		return
 	}
 
-	log, err := ctrl.services.TaskExecutionLogService.GetLog(id)
+	execLog, err := ctrl.services.TaskExecutionLogService.GetLog(id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.Fail(c, http.StatusNotFound, "執行紀錄不存在", nil)
 			return
 		}
-		response.Fail(c, http.StatusInternalServerError, "取得執行紀錄失敗", err.Error())
+		logger.WithTrace(c).Error(err.Error())
+		response.Fail(c, http.StatusInternalServerError, "取得執行紀錄失敗", nil)
 		return
 	}
 
-	response.Success(c, log, "成功獲取執行紀錄")
+	response.Success(c, execLog, "成功獲取執行紀錄")
 }

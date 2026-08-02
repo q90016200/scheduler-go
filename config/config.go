@@ -17,6 +17,7 @@ type Config struct {
 	TokenExpiry               time.Duration
 	CORSAllowOrigins          []string
 	ExecutionLogRetentionDays int
+	SSRFAllowPrivateTargets   bool
 }
 
 // PostgresConfig PostgreSQL 配置
@@ -67,6 +68,7 @@ func LoadConfig(filePath string) {
 		TokenExpiry:               viper.GetDuration("TOKEN_EXPIRY"),
 		CORSAllowOrigins:          corsAllowOrigins,
 		ExecutionLogRetentionDays: executionLogRetentionDays,
+		SSRFAllowPrivateTargets:   viper.GetBool("SSRF_ALLOW_PRIVATE_TARGETS"),
 		PostgresConfig: PostgresConfig{
 			Username: viper.GetString("POSTGRES_USER"),
 			Password: viper.GetString("POSTGRES_PASSWORD"),
@@ -74,5 +76,19 @@ func LoadConfig(filePath string) {
 			Port:     viper.GetString("POSTGRES_PORT"),
 			Database: viper.GetString("POSTGRES_DATABASE"),
 		},
+	}
+
+	requireNonEmpty := map[string]string{
+		"APP_SECRET":        AppConfig.AppSecret,
+		"POSTGRES_HOST":     AppConfig.PostgresConfig.Host,
+		"POSTGRES_PORT":     AppConfig.PostgresConfig.Port,
+		"POSTGRES_USER":     AppConfig.PostgresConfig.Username,
+		"POSTGRES_PASSWORD": AppConfig.PostgresConfig.Password,
+		"POSTGRES_DATABASE": AppConfig.PostgresConfig.Database,
+	}
+	for key, val := range requireNonEmpty {
+		if val == "" {
+			log.Fatalf("缺少必要的環境變數: %s", key)
+		}
 	}
 }

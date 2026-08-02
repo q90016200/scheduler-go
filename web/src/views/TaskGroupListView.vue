@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import StatusTag from '../components/StatusTag.vue'
 import { deleteTaskGroup, listTaskGroups } from '../api/taskGroups'
-import type { TaskGroup } from '../types'
+import { listTasks } from '../api/tasks'
+import type { SortOrder, TaskGroup } from '../types'
 
 const router = useRouter()
 const groups = ref<TaskGroup[]>([])
@@ -12,11 +13,24 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = 20
 const loading = ref(false)
+const filters = reactive<{ name: string; status: string; sort_field: 'name' | 'created_at' | 'status' | ''; sort_order: SortOrder }>({
+  name: '',
+  status: '',
+  sort_field: '',
+  sort_order: 'asc',
+})
 
 async function load() {
   loading.value = true
   try {
-    const result = await listTaskGroups({ limit: pageSize, offset: (page.value - 1) * pageSize })
+    const result = await listTaskGroups({
+      name: filters.name || undefined,
+      status: filters.status || undefined,
+      sort_field: filters.sort_field || undefined,
+      sort_order: filters.sort_order,
+      limit: pageSize,
+      offset: (page.value - 1) * pageSize,
+    })
     groups.value = result.groups
     total.value = result.total
   } finally {
@@ -24,12 +38,25 @@ async function load() {
   }
 }
 
+function reloadFromFirstPage() {
+  page.value = 1
+  load()
+}
+
 onMounted(load)
 
 async function handleDelete(group: TaskGroup) {
-  await ElMessageBox.confirm(`確定刪除群組「${group.name}」？`, '刪除群組', { type: 'warning' })
-  await deleteTaskGroup(group.id)
-  ElMessage.success('已刪除')
+  const { tasks: activeTasks } = await listTasks({ group_id: group.id, status: 'active', limit: 100 })
+
+  const warning =
+    activeTasks.length > 0
+      ? `群組「${group.name}」底下有 ${activeTasks.length} 個執行中的任務（${activeTasks.map((t) => t.name).join('、')}），刪除群組會一併停用這些任務。確定刪除？`
+      : `確定刪除群組「${group.name}」？`
+  await ElMessageBox.confirm(warning, '刪除群組', { type: 'warning' })
+
+  const result = await deleteTaskGroup(group.id)
+  const deactivated = result.deactivated_tasks ?? []
+  ElMessage.success(deactivated.length > 0 ? `已刪除，並停用了 ${deactivated.length} 個任務` : '已刪除')
   load()
 }
 </script>
@@ -37,6 +64,20 @@ async function handleDelete(group: TaskGroup) {
 <template>
   <el-card>
     <div class="toolbar">
+      <el-input v-model="filters.name" placeholder="名稱篩選" clearable style="width: 160px" @change="reloadFromFirstPage" @clear="reloadFromFirstPage" />
+      <el-select v-model="filters.status" placeholder="狀態篩選" clearable style="width: 140px" @change="reloadFromFirstPage">
+        <el-option label="啟用" value="active" />
+        <el-option label="停用" value="inactive" />
+      </el-select>
+      <el-select v-model="filters.sort_field" placeholder="排序欄位" clearable style="width: 140px" @change="reloadFromFirstPage">
+        <el-option label="名稱" value="name" />
+        <el-option label="建立時間" value="created_at" />
+        <el-option label="狀態" value="status" />
+      </el-select>
+      <el-select v-model="filters.sort_order" style="width: 100px" @change="reloadFromFirstPage">
+        <el-option label="正序" value="asc" />
+        <el-option label="倒序" value="desc" />
+      </el-select>
       <el-button type="primary" @click="router.push('/groups/new')">新增群組</el-button>
       <el-button :loading="loading" @click="load">重新整理</el-button>
     </div>

@@ -22,12 +22,6 @@ func NewTaskController(services *app.AppServices) *TaskController {
 }
 
 func (ctrl *TaskController) ListTasksHandler(c *gin.Context) {
-	//if !config.AppConfig.TaskEnabled {
-	//	logger.Logger.Warn("任務系統已停用")
-	//	c.JSON(http.StatusForbidden, gin.H{"error": "任務系統已停用"})
-	//	return
-	//}
-
 	// 提取查詢參數
 	status := c.Query("status")    // 篩選條件：status
 	groupID := c.Query("group_id") // 篩選條件：group_id
@@ -48,7 +42,8 @@ func (ctrl *TaskController) ListTasksHandler(c *gin.Context) {
 	// 調用 Service
 	tasks, total, err := ctrl.services.TaskServices.ListTasks(status, groupID, name, sortField, sortOrder, limit, offset)
 	if err != nil {
-		response.Fail(c, http.StatusInternalServerError, "取得任務清單失敗", err.Error())
+		logger.WithTrace(c).Error(err.Error())
+		response.Fail(c, http.StatusInternalServerError, "取得任務清單失敗", nil)
 		return
 	}
 
@@ -70,7 +65,8 @@ func (ctrl *TaskController) GetTaskHandler(c *gin.Context) {
 			response.Fail(c, http.StatusNotFound, "任務不存在", nil)
 			return
 		}
-		response.Fail(c, http.StatusInternalServerError, "取得任務失敗", err.Error())
+		logger.WithTrace(c).Error(err.Error())
+		response.Fail(c, http.StatusInternalServerError, "取得任務失敗", nil)
 		return
 	}
 
@@ -104,12 +100,12 @@ func (ctrl *TaskController) CreateTaskHandler(c *gin.Context) {
 
 	task, err := ctrl.services.TaskServices.CreateTask(req)
 	if err != nil {
-		response.Fail(c, http.StatusInternalServerError, "建立任務失敗", err.Error())
+		log.Error(err.Error())
+		response.Fail(c, http.StatusInternalServerError, "建立任務失敗", nil)
 		return
 	}
 
 	response.Success(c, task, "任務已建立")
-	return
 }
 
 // UpdateTaskHandler 更新任務
@@ -141,13 +137,50 @@ func (ctrl *TaskController) UpdateTaskHandler(c *gin.Context) {
 
 	task, err := ctrl.services.TaskServices.UpdateTask(id, req)
 	if err != nil {
-		log.Info(err.Error())
-		response.Fail(c, http.StatusInternalServerError, "更新任務失敗", err.Error())
+		log.Error(err.Error())
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, http.StatusNotFound, "任務不存在", nil)
+			return
+		}
+		response.Fail(c, http.StatusInternalServerError, "更新任務失敗", nil)
 		return
 	}
 
 	response.Success(c, task, "任務已更新")
-	//c.JSON(http.StatusOK, gin.H{"task": "任務已更新"})
+}
+
+// UpdateTaskStatusHandler 切換任務啟用/停用狀態
+func (ctrl *TaskController) UpdateTaskStatusHandler(c *gin.Context) {
+	log := logger.WithTrace(c)
+
+	id := c.Param("id")
+	if id == "" {
+		response.Fail(c, http.StatusBadRequest, "id is empty", nil)
+		return
+	}
+
+	var req models.UpdateTaskStatusReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
+		return
+	}
+	if err := utils.MyValidator.Struct(req); err != nil {
+		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
+		return
+	}
+
+	task, err := ctrl.services.TaskServices.UpdateTaskStatus(id, req.Status, req.UserId)
+	if err != nil {
+		log.Error(err.Error())
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, http.StatusNotFound, "任務不存在", nil)
+			return
+		}
+		response.Fail(c, http.StatusInternalServerError, "更新任務狀態失敗", nil)
+		return
+	}
+
+	response.Success(c, task, "任務狀態已更新")
 }
 
 // RunTaskHandler 立即執行一次任務
@@ -164,7 +197,8 @@ func (ctrl *TaskController) RunTaskHandler(c *gin.Context) {
 			response.Fail(c, http.StatusNotFound, "任務不存在", nil)
 			return
 		}
-		response.Fail(c, http.StatusInternalServerError, "執行任務失敗", err.Error())
+		logger.WithTrace(c).Error(err.Error())
+		response.Fail(c, http.StatusInternalServerError, "執行任務失敗", nil)
 		return
 	}
 
@@ -185,16 +219,24 @@ func (ctrl *TaskController) DeleteTaskHandler(c *gin.Context) {
 	}
 
 	if err := ctrl.services.TaskServices.DeleteTask(id); err != nil {
-		log.Info(err.Error())
-		response.Fail(c, http.StatusInternalServerError, "刪除任務失敗", err.Error())
+		log.Error(err.Error())
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, http.StatusNotFound, "任務不存在", nil)
+			return
+		}
+		response.Fail(c, http.StatusInternalServerError, "刪除任務失敗", nil)
 		return
 	}
 	response.Success(c, nil, "任務已刪除")
-	//c.JSON(http.StatusOK, gin.H{"message": "任務已刪除"})
 }
 
 // ListTaskGroupsHandler 列出所有任務群組
 func (ctrl *TaskController) ListTaskGroupsHandler(c *gin.Context) {
+	status := c.Query("status")
+	name := c.Query("name")
+	sortField := c.Query("sort_field")
+	sortOrder := c.Query("sort_order")
+
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	if limit <= 0 || limit > 100 {
 		limit = 20
@@ -204,9 +246,10 @@ func (ctrl *TaskController) ListTaskGroupsHandler(c *gin.Context) {
 		offset = 0
 	}
 
-	groups, total, err := ctrl.services.TaskServices.ListTaskGroups(limit, offset)
+	groups, total, err := ctrl.services.TaskServices.ListTaskGroups(status, name, sortField, sortOrder, limit, offset)
 	if err != nil {
-		response.Fail(c, http.StatusInternalServerError, "取得任務群組清單失敗", err.Error())
+		logger.WithTrace(c).Error(err.Error())
+		response.Fail(c, http.StatusInternalServerError, "取得任務群組清單失敗", nil)
 		return
 	}
 	response.Success(c, gin.H{"groups": groups, "total": total, "limit": limit, "offset": offset}, "成功獲取任務群組清單")
@@ -226,7 +269,8 @@ func (ctrl *TaskController) GetTaskGroupHandler(c *gin.Context) {
 			response.Fail(c, http.StatusNotFound, "任務群組不存在", nil)
 			return
 		}
-		response.Fail(c, http.StatusInternalServerError, "取得任務群組失敗", err.Error())
+		logger.WithTrace(c).Error(err.Error())
+		response.Fail(c, http.StatusInternalServerError, "取得任務群組失敗", nil)
 		return
 	}
 
@@ -260,12 +304,12 @@ func (ctrl *TaskController) CreateTaskGroupHandler(c *gin.Context) {
 
 	task, err := ctrl.services.TaskServices.CreateTaskGroup(req)
 	if err != nil {
-		response.Fail(c, http.StatusInternalServerError, "建立任務群組失敗", err.Error())
+		log.Error(err.Error())
+		response.Fail(c, http.StatusInternalServerError, "建立任務群組失敗", nil)
 		return
 	}
 
 	response.Success(c, task, "任務群組已建立")
-	return
 }
 
 // UpdateTaskGroupHandler 更新任務群組
@@ -297,8 +341,12 @@ func (ctrl *TaskController) UpdateTaskGroupHandler(c *gin.Context) {
 
 	task, err := ctrl.services.TaskServices.UpdateTaskGroup(id, req)
 	if err != nil {
-		log.Info(err.Error())
-		response.Fail(c, http.StatusInternalServerError, "更新任務群組失敗", err.Error())
+		log.Error(err.Error())
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, http.StatusNotFound, "任務群組不存在", nil)
+			return
+		}
+		response.Fail(c, http.StatusInternalServerError, "更新任務群組失敗", nil)
 		return
 	}
 
@@ -318,11 +366,20 @@ func (ctrl *TaskController) DeleteTaskGroupHandler(c *gin.Context) {
 		return
 	}
 
-	if err := ctrl.services.TaskServices.DeleteTaskGroup(id); err != nil {
-		log.Info(err.Error())
-		response.Fail(c, http.StatusInternalServerError, "刪除任務群組失敗", err.Error())
+	deactivated, err := ctrl.services.TaskServices.DeleteTaskGroup(id)
+	if err != nil {
+		log.Error(err.Error())
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, http.StatusNotFound, "任務群組不存在", nil)
+			return
+		}
+		response.Fail(c, http.StatusInternalServerError, "刪除任務群組失敗", nil)
 		return
 	}
-	response.Success(c, nil, "任務群組已刪除")
-	//c.JSON(http.StatusOK, gin.H{"message": "任務群組已刪除"})
+
+	deactivatedTasks := make([]gin.H, 0, len(deactivated))
+	for _, task := range deactivated {
+		deactivatedTasks = append(deactivatedTasks, gin.H{"id": task.ID, "name": task.Name})
+	}
+	response.Success(c, gin.H{"deactivated_tasks": deactivatedTasks}, "任務群組已刪除")
 }

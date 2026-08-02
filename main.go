@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/q90016200/scheduler-go/config"
 	"github.com/q90016200/scheduler-go/internal/app"
@@ -9,6 +11,11 @@ import (
 	"github.com/q90016200/scheduler-go/internal/scheduler"
 	"github.com/q90016200/scheduler-go/pkg/logger"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 func main() {
@@ -37,18 +44,37 @@ func main() {
 
 	// 啟動排程器
 	cronScheduler.StartScheduler()
-	defer cronScheduler.StartScheduler()
 
-	// 啟動 HTTP 服務
+	// 啟動 HTTP 服務，設定逾時避免慢速連線（Slowloris）長期占用
 	port := config.AppConfig.ServerPort
-	log.Printf("服務啟動中，端口：%s", port)
-	if err := r.Run(":" + port); err != nil {
-		log.Fatalf("服務啟動失敗: %v", err)
+	srv := &http.Server{
+		Addr:              ":" + port,
+		Handler:           r,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
+	go func() {
+		log.Printf("服務啟動中，端口：%s", port)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("服務啟動失敗: %v", err)
+		}
+	}()
+
 	// 等待信號以安全退出
-	//quit := make(chan os.Signal, 1)
-	//signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-	//<-quit
-	//log.Println("服務關閉中...")
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+	log.Println("服務關閉中...")
+
+	cronScheduler.StopCronScheduler()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("服務關閉失敗: %v", err)
+	}
+	log.Println("服務已關閉")
 }

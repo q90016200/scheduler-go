@@ -1,7 +1,6 @@
 package router
 
 import (
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/q90016200/scheduler-go/config"
 	"github.com/q90016200/scheduler-go/internal/app"
@@ -10,7 +9,6 @@ import (
 	"github.com/q90016200/scheduler-go/pkg/response"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // SetupRouter 設定所有路由
@@ -32,6 +30,7 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 		taskRoutes.POST("/", taskController.CreateTaskHandler)
 		taskRoutes.PUT("/:id", taskController.UpdateTaskHandler)
 		taskRoutes.DELETE("/:id", taskController.DeleteTaskHandler)
+		taskRoutes.PATCH("/:id/status", taskController.UpdateTaskStatusHandler)
 		taskRoutes.POST("/:id/run", taskController.RunTaskHandler)
 
 		taskRoutes.GET("/group/", taskController.ListTaskGroupsHandler)
@@ -51,14 +50,6 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 		authRoutes.POST("/login", authController.LoginHandler)
 		authRoutes.POST("/logout", authController.LogoutHandler)
 		authRoutes.GET("/me", authController.MeHandler)
-	}
-
-	testRoutes := api.Group("/test").Use(middleware.OpenTracingMiddleware())
-	{
-		testRoutes.Any("/:id", func(c *gin.Context) {
-			fmt.Println(c.Param("id"), time.Now())
-			c.String(200, "test")
-		})
 	}
 
 	// 服務前端建置產物（web/dist），同源部署不需要 CORS/nginx

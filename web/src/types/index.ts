@@ -99,3 +99,12 @@ export interface ListTaskGroupsResult {
   limit: number
   offset: number
 }
+
+export interface DeactivatedTaskRef {
+  id: string
+  name: string
+}
+
+export interface DeleteTaskGroupResult {
+  deactivated_tasks: DeactivatedTaskRef[]
+}

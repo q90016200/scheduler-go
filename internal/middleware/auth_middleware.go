@@ -7,6 +7,8 @@ import (
 	"net/http"
 )
 
+// JWTAuthMiddleware 目前未掛載於 router（見 internal/router/router.go），全站 API 暫時開放。
+// 啟用時需同時恢復 web/src/router/index.ts 的登入守衛與 App.vue 的登入殼層。
 func JWTAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		//// 從 Authorization 頭中獲取 JWT 令牌

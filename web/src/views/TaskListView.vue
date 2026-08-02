@@ -3,7 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import TaskForm from '../components/TaskForm.vue'
-import { createTask, deleteTask, listTasks, runTask, updateTask } from '../api/tasks'
+import { createTask, deleteTask, listTasks, runTask, updateTask, updateTaskStatus } from '../api/tasks'
 import { listTaskGroups } from '../api/taskGroups'
 import { useAuthStore } from '../stores/auth'
 import type { ActiveStatus, SortField, SortOrder, Task, TaskGroup, TaskWriteDTO } from '../types'
@@ -83,18 +83,7 @@ async function handleRun(task: Task) {
 async function handleStatusChange(task: Task, status: ActiveStatus) {
   statusUpdatingIds.value.add(task.id)
   try {
-    await updateTask(task.id, {
-      group_id: task.group_id,
-      name: task.name,
-      description: task.description,
-      schedule: task.schedule,
-      type: task.type,
-      endpoint: task.endpoint,
-      method: task.method,
-      payload: task.payload,
-      status,
-      user_id: auth.user?.id ?? '',
-    })
+    await updateTaskStatus(task.id, status, auth.user?.id ?? '')
     ElMessage.success('狀態已更新')
     await load()
   } catch (err) {

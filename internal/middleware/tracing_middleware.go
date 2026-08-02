@@ -6,15 +6,22 @@ import (
 	"github.com/q90016200/scheduler-go/pkg/utils"
 	"github.com/rs/xid"
 	"github.com/sirupsen/logrus"
+	"time"
 )
 
 func OpenTracingMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 生成唯一的 Trace ID
-		traceID := utils.RandString(3) + xid.New().String()
+		// 優先沿用上游傳入的 X-Request-ID，方便跨服務追蹤；沒有才自行生成
+		traceID := c.GetHeader("X-Request-ID")
+		if traceID == "" {
+			traceID = utils.RandString(3) + xid.New().String()
+		}
 
-		// 將 Trace ID 加入到 Context 中
+		// 將 Trace ID 加入到 Context 中，並回寫 response header 供呼叫方對照
 		c.Set("trace_id", traceID)
+		c.Header("X-Request-ID", traceID)
+
+		start := time.Now()
 
 		// 記錄請求開始的日誌
 		log := logger.WithTrace(c)
@@ -27,6 +34,9 @@ func OpenTracingMiddleware() gin.HandlerFunc {
 		c.Next()
 
 		// 記錄請求結束的日誌
-		log.Printf("End request, Trace ID: %s", traceID)
+		log.WithFields(logrus.Fields{
+			"status":      c.Writer.Status(),
+			"duration_ms": time.Since(start).Milliseconds(),
+		}).Info("請求結束")
 	}
 }

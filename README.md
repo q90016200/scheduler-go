@@ -29,17 +29,18 @@ scheduler-tool/
 │   │   ├── task_service.go            # 任務與群組服務
 │   │   └── task_execution_log_service.go # 任務執行紀錄服務
 │   ├── scheduler/          # cron 排程器，執行 http/rpc 任務、記錄執行結果、清除過期紀錄
-│   │   ├── cron.go
+│   │   ├── cron.go              # cron.Recover 防護、每分鐘 poller、SSRF 防護的 resty client
 │   │   └── jobs.go
 │   ├── middleware/         # 中介軟體
 │   │   ├── auth_middleware.go
+│   │   ├── tracing_middleware.go # trace_id（沿用 X-Request-ID 或自動產生）
 │   │   └── cors_middleware.go   # CORS（僅開發模式掛載）
 │   └── router/             # 路由設定，同時負責服務 web/dist 前端靜態檔（SPA fallback）
 │       └── router.go
 ├── pkg/                    # 公用元件（工具、輔助功能等）
-│   ├── logger/             # 日誌記錄
+│   ├── logger/             # 日誌記錄（stdout 彩色 / 檔案 JSON 分流，見下方「日誌與追蹤」）
 │   ├── response/           # API 回應封裝
-│   └── utils/              # 驗證器等公用工具
+│   └── utils/              # 驗證器、SSRF 連線防護（ssrf.go）等公用工具
 ├── web/                    # Vue3 + TypeScript + Vite 前端（獨立專案，見下方「前端開發」）
 ├── .env                    # 環境變數配置
 ├── go.mod                  # Go modules 配置
@@ -88,6 +89,14 @@ scheduler-tool/
 
    參考下方「前端開發」段落，`cd web && npm install && npm run dev`，開發伺服器預設在 http://localhost:5173。
 
+6. **執行測試**（選用）
+
+   ```bash
+   go test ./...
+   ```
+
+   涵蓋 `internal/scheduler`（cron 註冊/錯誤路徑）與 `pkg/utils`（SSRF 連線防護）。排程相關程式碼可另外用 `go test -race ./internal/scheduler/...` 檢查併發安全。
+
 ## 環境變數 (.env)
 
 | 變數 | 說明 | 預設 |
@@ -96,12 +105,13 @@ scheduler-tool/
 | `APP_ENV` | `development` 時才會掛載 CORS middleware（正式環境同源部署不需要） | `development` |
 | `SERVER_PORT` | Gin 監聽埠 | - |
 | `SERVER_DOMAIN` | cookie 的 domain | - |
-| `TASK_ENABLED` | 是否啟用 cron 排程器 | `true` |
-| `APP_SECRET` | JWT 簽章金鑰 | - |
+| `APP_SECRET` | JWT 簽章金鑰。缺少會在啟動時 `log.Fatalf`，不會帶著空金鑰跑起來 | - |
 | `TOKEN_EXPIRY` | JWT/cookie 有效秒數 | - |
 | `CORS_ALLOW_ORIGINS` | 開發模式允許的前端來源，逗號分隔 | 空 |
 | `EXECUTION_LOG_RETENTION_DAYS` | 任務執行紀錄保留天數，超過會被每日排程清除 | `120` |
-| `POSTGRES_*` | PostgreSQL 連線資訊 | - |
+| `SSRF_ALLOW_PRIVATE_TARGETS` | 設 `true` 時關閉任務執行的 SSRF 防護（連 loopback/metadata 位址都放行），僅供確實需要打 loopback 的情境使用 | `false` |
+| `LOG_LEVEL` | logrus 最低輸出等級（`debug`/`info`/`warn`/`error`...） | 開發環境 `debug`，其餘 `info` |
+| `POSTGRES_*` | PostgreSQL 連線資訊。任一項缺少同樣會在啟動時 `log.Fatalf` | - |
 
 ## API 端點
 
@@ -109,11 +119,28 @@ scheduler-tool/
 
 **Auth**（`/api/auth`）：`POST /register`、`POST /login`（設定 `auth_token` HttpOnly cookie）、`POST /logout`、`GET /me`（取得目前使用者，需帶有效 cookie 才有意義）。
 
-**Task**（`/api/tasks`）：`GET /`（清單，可用 `status`/`sort_field`/`sort_order` 查詢參數）、`GET /:id`、`POST /`、`PUT /:id`、`DELETE /:id`。
+**Task**（`/api/tasks`）：
+- `GET /`（清單，可用 `status`/`group_id`/`name`（模糊比對）/`sort_field`/`sort_order`/`limit`/`offset` 查詢參數）
+- `GET /:id`、`POST /`、`PUT /:id`（整包更新，`name`/`schedule`/`type`/`endpoint` 皆為必填）、`DELETE /:id`
+- `PATCH /:id/status`（body 僅需 `{"status": "active"|"inactive", "user_id": "..."}`，只切換啟用狀態，不需送整包任務資料）
+- `POST /:id/run`（立即觸發一次，不受排程狀態影響）
+- 建立/更新時 `type` 限定 `http`/`rpc`、`schedule` 必須是合法的標準 cron 表達式，兩者驗證失敗會在寫入資料庫前被擋下（回 400），不會留下無法排程的孤兒資料。
 
-**TaskGroup**（`/api/tasks/group`）：`GET /`、`GET /:id`、`POST /`、`PUT /:id`、`DELETE /:id`。將群組 `PUT` 成 `inactive` 會連動把該群組底下仍為 `active` 的任務改成 `inactive` 並取消排程；改回 `active` 不會自動恢復子任務，需個別開啟。
+**TaskGroup**（`/api/tasks/group`）：`GET /`（可用 `status`/`name`/`sort_field`/`sort_order`/`limit`/`offset`）、`GET /:id`、`POST /`、`PUT /:id`、`DELETE /:id`。將群組 `PUT` 成 `inactive`，或直接 `DELETE` 群組，都會連動把該群組底下仍為 `active` 的任務改成 `inactive` 並取消排程（`DELETE` 的回應會帶 `deactivated_tasks: [{id, name}]`，供前端提示使用者哪些任務被停用了）；改回 `active` 不會自動恢復子任務，需個別開啟。
 
-**執行紀錄**（`/api/tasks/logs`）：`GET /`（可用 `task_id`/`task_name`/`group_id` 篩選，`limit`/`offset` 分頁，回傳每筆會帶 `task.name`/`task.group.name`）、`GET /:id`（同樣帶 `task` 資訊）。
+**執行紀錄**（`/api/tasks/logs`）：`GET /`（可用 `task_id`/`task_name`/`group_id` 篩選，`limit`/`offset` 分頁，回傳每筆會帶 `task.name`/`task.group.name`）、`GET /:id`（同樣帶 `task` 資訊）。刪除任務會連動刪除其執行紀錄（外鍵 `ON DELETE CASCADE`）。
+
+## 安全性
+
+- **SSRF 防護**：`http`/`rpc` 任務執行時，連線會擋下 loopback（`127.0.0.1`）、link-local（含雲端 metadata 位址 `169.254.169.254`）與未指定位址（`0.0.0.0`），且是在實際連線當下檢查已解析出的 IP，不受 DNS rebinding 影響。**刻意不封鎖 RFC1918 私有網段**——這是內部排程工具，打內網服務是其本職功能。確實需要打 loopback 時可設定 `SSRF_ALLOW_PRIVATE_TARGETS=true`，但這會關閉整組防護，請謹慎使用。
+- **登入/註冊目前暫時停用**（見上方端點列表前的說明），所有端點無需認證即可呼叫；請只在受信任的內部網路中部署。
+
+## 日誌與追蹤
+
+- `logs/app.log`（`lumberjack` 輪替：10MB/份、保留 5 份、10 天、壓縮）以 **JSON** 格式寫入，可直接用 `jq` 過濾，例如：`jq 'select(.trace_id=="xxxxx")' logs/app.log`。
+- 終端機（stdout）輸出彩色、人類可讀的格式，兩者格式不同但內容一致（含 `trace_id`、錯誤內容等欄位）。
+- 每個 API 請求都會被指派一個 `trace_id`：若請求帶有 `X-Request-ID` header 就沿用，否則自動產生；同一個值會出現在 API 回應的 `trace` 欄位、回應的 `X-Request-ID` header，以及該請求相關的所有 log 行中，方便串接排查。
+- 輸出等級由 `LOG_LEVEL` 環境變數控制（見上方環境變數表）。
 
 ## 前端開發
 

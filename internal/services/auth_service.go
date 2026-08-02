@@ -5,7 +5,6 @@ import (
 	"github.com/rs/xid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
-	"time"
 )
 
 type AuthService struct {
@@ -23,12 +22,10 @@ func (s *AuthService) Register(username, password string) error {
 	}
 
 	user := &models.User{
-		ID:        xid.New().String(),
-		UserName:  username,
-		Password:  string(hashedPassword),
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-		Status:    true,
+		ID:       xid.New().String(),
+		UserName: username,
+		Password: string(hashedPassword),
+		Status:   true,
 	}
 	return s.db.Create(user).Error
 }

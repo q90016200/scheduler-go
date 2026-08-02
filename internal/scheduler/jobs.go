@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -77,23 +78,25 @@ func UnregisterTaskJob(cs *CronScheduler, id string) error {
 func RunRequestHttp(log *logger.LogrusAdapter, db *gorm.DB, client *resty.Client, task *models.Task) func() {
 	return func() {
 		startedAt := time.Now().Unix()
-		client = client.SetTimeout(time.Duration(10) * time.Second)
 
 		var resp *resty.Response
 		var err error
-		if task.Method == "GET" {
+		switch task.Method {
+		case "GET":
 			resp, err = client.R().Get(task.Endpoint)
-		} else if task.Method == "POST" || task.Method == "PUT" || task.Method == "DELETE" {
-			req := client.R().SetBody(task.Payload)
-
-			switch task.Method {
-			case "POST":
-				resp, err = req.Post(task.Endpoint)
-			case "PUT":
-				resp, err = req.Put(task.Endpoint)
-			case "DELETE":
-				resp, err = req.Delete(task.Endpoint)
-			}
+		case "POST":
+			resp, err = client.R().SetBody(task.Payload).Post(task.Endpoint)
+		case "PUT":
+			resp, err = client.R().SetBody(task.Payload).Put(task.Endpoint)
+		case "DELETE":
+			resp, err = client.R().SetBody(task.Payload).Delete(task.Endpoint)
+		case "PATCH":
+			resp, err = client.R().SetBody(task.Payload).Patch(task.Endpoint)
+		default:
+			errMsg := fmt.Sprintf("unsupported http method: %s", task.Method)
+			log.Info(fmt.Sprintf("task: %+v \n RunRequestHttp %s", task, errMsg))
+			logExecution(db, log, task.ID, startedAt, models.EXEC_STATUS_FAILED, "", errMsg)
+			return
 		}
 
 		if err != nil {
@@ -102,11 +105,7 @@ func RunRequestHttp(log *logger.LogrusAdapter, db *gorm.DB, client *resty.Client
 			return
 		}
 
-		//if resp.StatusCode() != http.StatusOK {
-		//	log.Infof("task: %+v \n RunRequestHttp fail:%v", task, err)
-		//}
-
-		log.Info(fmt.Sprintf("task: %+v \n RunRequestHttp resp.StatusCode:%v resp:%v", task, resp.StatusCode(), string(resp.Body())))
+		log.Info(fmt.Sprintf("task: %+v \n RunRequestHttp resp.StatusCode:%v resp:%v", task, resp.StatusCode(), truncate(string(resp.Body()), maxLogOutputLen)))
 		logExecution(db, log, task.ID, startedAt, models.EXEC_STATUS_SUCCESS, string(resp.Body()), "")
 	}
 }
@@ -127,7 +126,12 @@ func RunRequestRpc(log *logger.LogrusAdapter, db *gorm.DB, task *models.Task) fu
 			return
 		}
 
-		conn, err := grpc.NewClient(task.Endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		conn, err := grpc.NewClient(task.Endpoint,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+				return utils.SafeDialContext(ctx, "tcp", addr)
+			}),
+		)
 		if err != nil {
 			log.Info(fmt.Sprintf("task: %+v \n RunRequestRpc dial fail: %v", task, err))
 			logExecution(db, log, task.ID, startedAt, models.EXEC_STATUS_FAILED, "", err.Error())
@@ -177,7 +181,7 @@ func RunRequestRpc(log *logger.LogrusAdapter, db *gorm.DB, task *models.Task) fu
 			return
 		}
 		respBytes, _ := respJSON.MarshalJSON()
-		log.Info(fmt.Sprintf("task: %+v \n RunRequestRpc resp:%v", task, string(respBytes)))
+		log.Info(fmt.Sprintf("task: %+v \n RunRequestRpc resp:%v", task, truncate(string(respBytes), maxLogOutputLen)))
 		logExecution(db, log, task.ID, startedAt, models.EXEC_STATUS_SUCCESS, string(respBytes), "")
 	}
 }
@@ -199,13 +203,21 @@ func logExecution(db *gorm.DB, log *logger.LogrusAdapter, taskID string, started
 	}
 }
 
+// maxLogOutputLen 寫進 log 的回應內容長度上限，避免大回應灌爆 log 檔
+const maxLogOutputLen = 2000
+
+// truncate 將字串截斷至最多 n 個位元組
+func truncate(s string, n int) string {
+	if len(s) > n {
+		return s[:n]
+	}
+	return s
+}
+
 // toJSONColumn 確保寫進 output（Postgres jsonb 欄位）的內容一定是合法 JSON：
 // http 任務的回應本來就可能是 JSON，直接原樣存；不是合法 JSON（例如純文字/HTML）就包一層 {"raw": "..."}。
 func toJSONColumn(output string) string {
-	const maxOutputLen = 2000
-	if len(output) > maxOutputLen {
-		output = output[:maxOutputLen]
-	}
+	output = truncate(output, maxLogOutputLen)
 	if output == "" {
 		return "{}"
 	}

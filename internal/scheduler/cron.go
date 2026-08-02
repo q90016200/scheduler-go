@@ -6,8 +6,10 @@ import (
 	"github.com/q90016200/scheduler-go/config"
 	"github.com/q90016200/scheduler-go/internal/models"
 	"github.com/q90016200/scheduler-go/pkg/logger"
+	"github.com/q90016200/scheduler-go/pkg/utils"
 	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -27,33 +29,54 @@ func NewCronScheduler(db *gorm.DB) *CronScheduler {
 	log := logger.Log
 	cronLogger := &logger.LogrusAdapter{Logger: log}
 	return &CronScheduler{
-		Cron:             cron.New(cron.WithChain(cron.SkipIfStillRunning(cronLogger))),
+		Cron:             cron.New(cron.WithChain(cron.Recover(cronLogger), cron.SkipIfStillRunning(cronLogger))),
 		Log:              cronLogger,
 		taskCronEntryIDs: make(map[string]cron.EntryID),
 		db:               db,
-		restyClient:      resty.New(),
+		restyClient:      newSSRFGuardedRestyClient(),
 	}
+}
+
+// newSSRFGuardedRestyClient 建立一個限制連線目標的 resty client，避免無 auth 的 http 任務
+// 被當作 SSRF 跳板探測 loopback / link-local / metadata 位址（見 pkg/utils.SafeDialContext）
+func newSSRFGuardedRestyClient() *resty.Client {
+	transport := &http.Transport{DialContext: utils.SafeDialContext}
+	return resty.New().SetTimeout(10 * time.Second).SetTransport(transport)
+}
+
+// hasJob 回傳 taskID 是否已註冊 cron job，持鎖以避免與 Register/UnregisterTaskJob 的併發存取
+func (cs *CronScheduler) hasJob(taskID string) bool {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	_, exists := cs.taskCronEntryIDs[taskID]
+	return exists
+}
+
+// jobCount 持鎖回傳目前已註冊的 cron job 數量
+func (cs *CronScheduler) jobCount() int {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	return len(cs.taskCronEntryIDs)
 }
 
 // StartScheduler 啟動排程器並註冊所有任務
 func (cs *CronScheduler) StartScheduler() {
 	// 建立每分鐘檢查任務狀態任務
 	_, err := cs.Cron.AddFunc("* * * * *", func() {
-		fmt.Println("[cron] Running cron scheduler jobs", cs.taskCronEntryIDs)
+		cs.Log.Info(fmt.Sprintf("[cron] Running cron scheduler jobs, registered=%d", cs.jobCount()))
 		var tasks []models.Task
 		err := cs.db.Where("status = ?", models.TASK_STATUS_ACTIVE).
 			Order("created_at ASC").
 			Preload("Group").
 			Find(&tasks).Error
 		if err != nil {
-			errMsg := fmt.Sprintf("TaskServices.ListTasks err: %v", err)
-			cs.Log.Error(nil, errMsg)
+			cs.Log.Error(err, "TaskServices.ListTasks err")
 			return
 		}
 		for _, task := range tasks {
-			if _, exists := cs.taskCronEntryIDs[task.ID]; !exists {
+			if !cs.hasJob(task.ID) {
 				if err := RegisterTaskJob(cs, task.ID, &task); err != nil {
-					cs.Log.Info("task ID: " + task.ID + ", RegisterTaskJob err:" + err.Error())
+					cs.Log.Error(err, "task ID: "+task.ID+", RegisterTaskJob err")
 				}
 			}
 		}

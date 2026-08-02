@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-var jwtSecret = []byte("your-secret-key") // 建議從配置讀取密鑰
-
 type Claims struct {
 	UserID string `json:"user_id"`
 	jwt.RegisteredClaims
@@ -22,14 +20,14 @@ func GenerateToken(userID string) (string, error) {
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(jwtSecret)
+	return token.SignedString([]byte(config.AppConfig.AppSecret))
 }
 
 // ParseToken 解析並驗證 JWT
 func ParseToken(tokenString string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		return jwtSecret, nil
-	})
+		return []byte(config.AppConfig.AppSecret), nil
+	}, jwt.WithValidMethods([]string{"HS256"}))
 	if err != nil {
 		return nil, err
 	}

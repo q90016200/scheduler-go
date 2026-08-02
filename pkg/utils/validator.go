@@ -5,6 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"github.com/q90016200/scheduler-go/internal/models"
+	"github.com/robfig/cron/v3"
 	"regexp"
 	"strconv"
 	"strings"
@@ -20,7 +21,14 @@ func init() {
 	MyValidator.RegisterValidation("alphanumLength", checkAlphanumLength)
 	MyValidator.RegisterValidation("length", checkLength)
 	MyValidator.RegisterValidation("prec", checkPrecision)
+	MyValidator.RegisterValidation("cron", checkCronExpr)
 	MyValidator.RegisterStructValidation(validateTaskMethod, models.CreateTaskReq{}, models.UpdateTaskReq{})
+}
+
+// checkCronExpr 驗證欄位是否為合法的標準 cron 表達式（與 scheduler 實際使用的解析器一致）
+func checkCronExpr(fl validator.FieldLevel) bool {
+	_, err := cron.ParseStandard(fl.Field().String())
+	return err == nil
 }
 
 // validateTaskMethod 依 Task.Type 檢查 Method 欄位：
