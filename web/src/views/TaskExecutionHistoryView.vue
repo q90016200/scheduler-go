@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { Refresh } from '@element-plus/icons-vue'
 import ExecutionLogTable from '../components/ExecutionLogTable.vue'
+import IconButton from '../components/IconButton.vue'
 import { listExecutionLogs } from '../api/executionLogs'
 import type { ExecutionLog } from '../types'
 
@@ -29,7 +31,7 @@ onMounted(load)
   <el-card>
     <div class="toolbar">
       <h2>任務執行紀錄</h2>
-      <el-button :loading="loading" @click="load">重新整理</el-button>
+      <IconButton :icon="Refresh" label="重新整理" :loading="loading" @click="load" />
     </div>
     <ExecutionLogTable :logs="logs" :show-task="false" />
     <el-pagination

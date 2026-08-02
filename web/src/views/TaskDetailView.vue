@@ -2,7 +2,9 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Back, Document, VideoPlay } from '@element-plus/icons-vue'
 import StatusTag from '../components/StatusTag.vue'
+import IconButton from '../components/IconButton.vue'
 import { getTask, runTask } from '../api/tasks'
 import type { Task } from '../types'
 
@@ -38,9 +40,9 @@ async function handleRun() {
 <template>
   <el-card v-if="task">
     <div class="toolbar">
-      <el-button @click="router.push('/tasks')">返回清單</el-button>
-      <el-button :loading="running" @click="handleRun">立即執行</el-button>
-      <el-button @click="router.push(`/tasks/${task.id}/executions`)">執行紀錄</el-button>
+      <IconButton :icon="Back" label="返回清單" @click="router.push('/tasks')" />
+      <IconButton :icon="VideoPlay" label="立即執行" :loading="running" @click="handleRun" />
+      <IconButton :icon="Document" label="執行紀錄" @click="router.push(`/tasks/${task.id}/executions`)" />
     </div>
 
     <el-descriptions :column="2" border>

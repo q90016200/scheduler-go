@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
+import { Refresh } from '@element-plus/icons-vue'
 import ExecutionLogTable from '../components/ExecutionLogTable.vue'
+import IconButton from '../components/IconButton.vue'
 import { listExecutionLogs } from '../api/executionLogs'
 import { listTaskGroups } from '../api/taskGroups'
 import type { ExecutionLog, TaskGroup } from '../types'
@@ -49,7 +51,7 @@ onMounted(async () => {
       <el-select v-model="filters.groupId" placeholder="群組篩選" clearable style="width: 160px" @change="reloadFromFirstPage">
         <el-option v-for="g in groups" :key="g.id" :label="g.name" :value="g.id" />
       </el-select>
-      <el-button :loading="loading" @click="load">重新整理</el-button>
+      <IconButton :icon="Refresh" label="重新整理" :loading="loading" @click="load" />
     </div>
     <ExecutionLogTable :logs="logs" />
     <el-pagination

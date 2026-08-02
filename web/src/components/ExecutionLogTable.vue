@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { View } from '@element-plus/icons-vue'
 import StatusTag from './StatusTag.vue'
+import IconButton from './IconButton.vue'
 import type { ExecutionLog } from '../types'
 
 withDefaults(defineProps<{ logs: ExecutionLog[]; showTask?: boolean }>(), { showTask: true })
@@ -27,9 +29,9 @@ function formatTime(unixSeconds: number) {
     </el-table-column>
     <el-table-column prop="output" label="輸出" show-overflow-tooltip />
     <el-table-column prop="error_message" label="錯誤訊息" show-overflow-tooltip />
-    <el-table-column label="操作" width="100">
+    <el-table-column label="操作" width="60">
       <template #default="{ row }">
-        <el-button size="small" @click="router.push(`/executions/${row.id}`)">詳情</el-button>
+        <IconButton :icon="View" label="詳情" @click="router.push(`/executions/${row.id}`)" />
       </template>
     </el-table-column>
   </el-table>

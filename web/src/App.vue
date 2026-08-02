@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { Folder, Histogram, List, SwitchButton } from '@element-plus/icons-vue'
+import IconButton from './components/IconButton.vue'
 import { useAuthStore } from './stores/auth'
 
 const auth = useAuthStore()
@@ -13,13 +15,13 @@ async function handleLogout() {
   <el-container class="app-shell">
     <el-header class="app-header">
       <el-menu mode="horizontal" router :ellipsis="false" class="app-menu">
-        <el-menu-item index="/tasks">任務</el-menu-item>
-        <el-menu-item index="/groups">任務群組</el-menu-item>
-        <el-menu-item index="/executions">執行紀錄</el-menu-item>
+        <el-menu-item index="/tasks"><el-icon><List /></el-icon>任務</el-menu-item>
+        <el-menu-item index="/groups"><el-icon><Folder /></el-icon>任務群組</el-menu-item>
+        <el-menu-item index="/executions"><el-icon><Histogram /></el-icon>執行紀錄</el-menu-item>
       </el-menu>
       <div class="app-user">
         <span>{{ auth.user?.user_name }}</span>
-        <el-button size="small" @click="handleLogout">登出</el-button>
+        <IconButton :icon="SwitchButton" label="登出" @click="handleLogout" />
       </div>
     </el-header>
     <el-main>

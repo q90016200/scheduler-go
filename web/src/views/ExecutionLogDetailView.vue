@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { Back, Document } from '@element-plus/icons-vue'
 import StatusTag from '../components/StatusTag.vue'
+import IconButton from '../components/IconButton.vue'
 import { getExecutionLog } from '../api/executionLogs'
 import type { ExecutionLog } from '../types'
 
@@ -24,8 +26,8 @@ onMounted(load)
 <template>
   <el-card v-if="log">
     <div class="toolbar">
-      <el-button @click="router.back()">返回</el-button>
-      <el-button @click="router.push(`/tasks/${log.task_id}/executions`)">此任務的其他執行紀錄</el-button>
+      <IconButton :icon="Back" label="返回" @click="router.back()" />
+      <IconButton :icon="Document" label="此任務的其他執行紀錄" @click="router.push(`/tasks/${log.task_id}/executions`)" />
     </div>
 
     <el-descriptions :column="2" border>

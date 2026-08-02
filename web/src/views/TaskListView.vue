@@ -2,7 +2,9 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Delete, Document, Edit, Plus, Refresh, View, VideoPlay } from '@element-plus/icons-vue'
 import TaskForm from '../components/TaskForm.vue'
+import IconButton from '../components/IconButton.vue'
 import { createTask, deleteTask, listTasks, runTask, updateTask, updateTaskStatus } from '../api/tasks'
 import { listTaskGroups } from '../api/taskGroups'
 import { useAuthStore } from '../stores/auth'
@@ -144,8 +146,8 @@ async function handleSubmit(payload: TaskWriteDTO) {
         <el-option label="正序" value="asc" />
         <el-option label="倒序" value="desc" />
       </el-select>
-      <el-button type="primary" @click="openCreate">新增任務</el-button>
-      <el-button :loading="loading" @click="load">重新整理</el-button>
+      <IconButton :icon="Plus" label="新增任務" type="primary" @click="openCreate" />
+      <IconButton :icon="Refresh" label="重新整理" :loading="loading" @click="load" />
     </div>
 
     <el-table :data="tasks" style="width: 100%">
@@ -166,13 +168,15 @@ async function handleSubmit(payload: TaskWriteDTO) {
           />
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="320">
+      <el-table-column label="操作" width="180">
         <template #default="{ row }">
-          <el-button size="small" @click="router.push(`/tasks/${row.id}`)">詳情</el-button>
-          <el-button size="small" @click="openEdit(row)">編輯</el-button>
-          <el-button size="small" :loading="runningIds.has(row.id)" @click="handleRun(row)">立即執行</el-button>
-          <el-button size="small" @click="router.push(`/tasks/${row.id}/executions`)">執行紀錄</el-button>
-          <el-button size="small" type="danger" @click="handleDelete(row)">刪除</el-button>
+          <el-button-group>
+            <IconButton :icon="View" label="詳情" @click="router.push(`/tasks/${row.id}`)" />
+            <IconButton :icon="Edit" label="編輯" @click="openEdit(row)" />
+            <IconButton :icon="VideoPlay" label="立即執行" :loading="runningIds.has(row.id)" @click="handleRun(row)" />
+            <IconButton :icon="Document" label="執行紀錄" @click="router.push(`/tasks/${row.id}/executions`)" />
+            <IconButton :icon="Delete" label="刪除" type="danger" @click="handleDelete(row)" />
+          </el-button-group>
         </template>
       </el-table-column>
     </el-table>
