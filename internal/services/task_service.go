@@ -101,7 +101,7 @@ func (s *TaskService) CreateTask(input models.CreateTaskReq) (*models.Task, erro
 	}
 
 	// 當是執行的放入 syncMap 內，供排程取得目前可執行 task 清單
-	if task.Status == models.TASK_STATUS_ACTIVE {
+	if task.Status == models.STATUS_ENABLED {
 		if err := scheduler.RegisterTaskJob(s.cronScheduler, task.ID, task); err != nil {
 			// 註冊排程失敗，不留下無法排程的孤兒資料
 			if delErr := s.db.Delete(&models.Task{}, "id = ?", task.ID).Error; delErr != nil {
@@ -147,7 +147,7 @@ func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models
 		logger.Log.Error(errMsg)
 		return nil, err
 	}
-	if task.Status == models.TASK_STATUS_ACTIVE {
+	if task.Status == models.STATUS_ENABLED {
 		if err := scheduler.RegisterTaskJob(s.cronScheduler, id, task); err != nil {
 			errMsg := fmt.Sprintf("task: %T, RegisterTaskJob err: %v", task, err)
 			logger.Log.Error(errMsg)
@@ -182,7 +182,7 @@ func (s *TaskService) UpdateTaskStatus(id, status, userId string) (*models.Task,
 		logger.Log.Error(errMsg)
 		return nil, err
 	}
-	if status == models.TASK_STATUS_ACTIVE {
+	if status == models.STATUS_ENABLED {
 		if err := scheduler.RegisterTaskJob(s.cronScheduler, id, &task); err != nil {
 			errMsg := fmt.Sprintf("task: %T, RegisterTaskJob err: %v", task, err)
 			logger.Log.Error(errMsg)
@@ -193,16 +193,21 @@ func (s *TaskService) UpdateTaskStatus(id, status, userId string) (*models.Task,
 	return &task, nil
 }
 
-// RunTaskNow 立即執行一次任務，不受排程狀態影響
-func (s *TaskService) RunTaskNow(id string) (*models.Task, error) {
+// RunTaskNow 立即執行任務 repeat 次（間隔 intervalMs 毫秒），不受排程狀態影響，非同步執行後立刻回傳
+func (s *TaskService) RunTaskNow(id string, repeat, intervalMs int) (*models.Task, error) {
 	task, err := s.GetTask(id)
 	if err != nil {
 		return nil, err
 	}
-	if err := scheduler.RunTaskNow(s.cronScheduler, task); err != nil {
+	if err := scheduler.RunTaskNow(s.cronScheduler, task, repeat, intervalMs); err != nil {
 		return nil, err
 	}
 	return task, nil
+}
+
+// CancelRunNow 取消任務目前進行中的「立即執行」重複批次
+func (s *TaskService) CancelRunNow(id string) error {
+	return scheduler.CancelTaskRun(s.cronScheduler, id)
 }
 
 func (s *TaskService) DeleteTask(id string) error {
@@ -281,13 +286,13 @@ func (s *TaskService) CreateTaskGroup(input models.CreateTaskGroupReq) (*models.
 // 回傳被停用的任務清單（供呼叫端在交易 commit 後取消其 cron 排程）
 func (s *TaskService) deactivateGroupTasksTx(tx *gorm.DB, groupID string) ([]models.Task, error) {
 	var tasks []models.Task
-	if err := tx.Where("group_id = ? AND status = ?", groupID, models.TASK_STATUS_ACTIVE).Find(&tasks).Error; err != nil {
+	if err := tx.Where("group_id = ? AND status = ?", groupID, models.STATUS_ENABLED).Find(&tasks).Error; err != nil {
 		return nil, err
 	}
 	if len(tasks) > 0 {
 		if err := tx.Model(&models.Task{}).
-			Where("group_id = ? AND status = ?", groupID, models.TASK_STATUS_ACTIVE).
-			Update("status", models.TASK_STATUS_INACTIVE).Error; err != nil {
+			Where("group_id = ? AND status = ?", groupID, models.STATUS_ENABLED).
+			Update("status", models.STATUS_DISABLED).Error; err != nil {
 			return nil, err
 		}
 	}
@@ -325,7 +330,7 @@ func (s *TaskService) UpdateTaskGroup(id string, input models.UpdateTaskGroupReq
 		}
 
 		// 群組停用時連動停用底下仍為 active 的任務；改回啟用不自動恢復子任務
-		if input.Status == models.TASK_STATUS_INACTIVE {
+		if input.Status == models.STATUS_DISABLED {
 			tasks, err := s.deactivateGroupTasksTx(tx, id)
 			if err != nil {
 				return err

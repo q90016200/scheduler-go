@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { Back, Document, VideoPlay } from '@element-plus/icons-vue'
 import StatusTag from '../components/StatusTag.vue'
 import IconButton from '../components/IconButton.vue'
-import { getTask, runTask } from '../api/tasks'
+import RunTaskDialog from '../components/RunTaskDialog.vue'
+import { getTask } from '../api/tasks'
 import type { Task } from '../types'
 
 const props = defineProps<{ id: string }>()
 const router = useRouter()
 const task = ref<Task>()
-const running = ref(false)
+const runDialogVisible = ref(false)
 
 function formatTime(unixSeconds: number) {
   if (!unixSeconds) return '-'
@@ -23,25 +23,13 @@ async function load() {
 }
 
 onMounted(load)
-
-async function handleRun() {
-  running.value = true
-  try {
-    await runTask(props.id)
-    ElMessage.success('已觸發執行，請至執行紀錄查看結果')
-  } catch (err) {
-    ElMessage.error((err as Error).message || '觸發執行失敗')
-  } finally {
-    running.value = false
-  }
-}
 </script>
 
 <template>
   <el-card v-if="task">
     <div class="toolbar">
       <IconButton :icon="Back" label="返回清單" @click="router.push('/tasks')" />
-      <IconButton :icon="VideoPlay" label="立即執行" :loading="running" @click="handleRun" />
+      <IconButton :icon="VideoPlay" label="立即執行" @click="runDialogVisible = true" />
       <IconButton :icon="Document" label="執行紀錄" @click="router.push(`/tasks/${task.id}/executions`)" />
     </div>
 
@@ -62,6 +50,8 @@ async function handleRun() {
       <el-descriptions-item label="建立時間">{{ formatTime(task.created_at) }}</el-descriptions-item>
       <el-descriptions-item label="更新時間">{{ formatTime(task.updated_at) }}</el-descriptions-item>
     </el-descriptions>
+
+    <RunTaskDialog v-if="runDialogVisible" v-model:visible="runDialogVisible" :task="task" />
   </el-card>
 </template>
 

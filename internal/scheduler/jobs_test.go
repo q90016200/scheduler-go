@@ -1,7 +1,13 @@
 package scheduler
 
 import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/q90016200/scheduler-go/internal/models"
@@ -11,11 +17,15 @@ import (
 )
 
 func newTestScheduler() *CronScheduler {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &CronScheduler{
 		Cron:             cron.New(),
 		Log:              &logger.LogrusAdapter{Logger: logrus.New()},
 		taskCronEntryIDs: make(map[string]cron.EntryID),
 		restyClient:      resty.New(),
+		runBatches:       make(map[string]context.CancelFunc),
+		baseCtx:          ctx,
+		baseCancel:       cancel,
 	}
 }
 
@@ -66,7 +76,68 @@ func TestRunTaskNowUnknownType(t *testing.T) {
 	cs := newTestScheduler()
 	task := &models.Task{ID: "t4", Type: "shell"}
 
-	if err := RunTaskNow(cs, task); err == nil {
+	if err := RunTaskNow(cs, task, 1, 100); err == nil {
 		t.Fatal("expected error for unknown task type")
+	}
+}
+
+func TestRunTaskNowRepeatsAndRejectsConcurrentBatch(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	cs := newTestScheduler()
+	task := &models.Task{ID: "batch1", Type: "http", Method: "GET", Endpoint: srv.URL}
+
+	if err := RunTaskNow(cs, task, 3, 20); err != nil {
+		t.Fatalf("RunTaskNow returned error: %v", err)
+	}
+	if err := RunTaskNow(cs, task, 3, 20); !errors.Is(err, ErrBatchAlreadyRunning) {
+		t.Fatalf("expected ErrBatchAlreadyRunning for concurrent batch, got %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for hits.Load() < 3 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := hits.Load(); got != 3 {
+		t.Fatalf("expected 3 requests, got %d", got)
+	}
+
+	// 批次已跑完，registry 應已清空
+	if err := CancelTaskRun(cs, task.ID); !errors.Is(err, ErrBatchNotFound) {
+		t.Fatalf("expected ErrBatchNotFound after batch finished, got %v", err)
+	}
+}
+
+func TestCancelTaskRunStopsRemainingRequests(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	cs := newTestScheduler()
+	task := &models.Task{ID: "batch2", Type: "http", Method: "GET", Endpoint: srv.URL}
+
+	if err := RunTaskNow(cs, task, 10, 200); err != nil {
+		t.Fatalf("RunTaskNow returned error: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for hits.Load() < 1 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if err := CancelTaskRun(cs, task.ID); err != nil {
+		t.Fatalf("CancelTaskRun returned error: %v", err)
+	}
+
+	time.Sleep(400 * time.Millisecond) // 遠超第二次 interval，若取消沒生效這裡就會抓到第二筆
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("expected exactly 1 request after cancel, got %d", got)
 	}
 }

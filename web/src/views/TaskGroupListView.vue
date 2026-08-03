@@ -45,21 +45,38 @@ function reloadFromFirstPage() {
   load()
 }
 
+function handleSortChange({ prop, order }: { prop: string; order: 'ascending' | 'descending' | null }) {
+  filters.sort_field = order ? (prop as 'name' | 'status') : ''
+  filters.sort_order = order === 'ascending' ? 'asc' : 'desc'
+  reloadFromFirstPage()
+}
+
 onMounted(load)
 
 async function handleDelete(group: TaskGroup) {
-  const { tasks: activeTasks } = await listTasks({ group_id: group.id, status: 'active', limit: 100 })
+  try {
+    const [all, enabled] = await Promise.all([
+      listTasks({ group_id: group.id, limit: 5 }),
+      listTasks({ group_id: group.id, status: 'enabled', limit: 1 }),
+    ])
 
-  const warning =
-    activeTasks.length > 0
-      ? `群組「${group.name}」底下有 ${activeTasks.length} 個執行中的任務（${activeTasks.map((t) => t.name).join('、')}），刪除群組會一併停用這些任務。確定刪除？`
-      : `確定刪除群組「${group.name}」？`
-  await ElMessageBox.confirm(warning, '刪除群組', { type: 'warning' })
+    let warning = `確定刪除群組「${group.name}」？`
+    if (all.total > 0) {
+      const names = all.tasks.map((t) => t.name).join('、') + (all.total > all.tasks.length ? '…' : '')
+      warning =
+        `群組「${group.name}」底下共 ${all.total} 個任務（其中 ${enabled.total} 個啟用中）：${names}。` +
+        `刪除群組不會刪除這些任務，但會變成沒有群組；啟用中的任務會被停用。確定刪除？`
+    }
+    await ElMessageBox.confirm(warning, '刪除群組', { type: 'warning' })
 
-  const result = await deleteTaskGroup(group.id)
-  const deactivated = result.deactivated_tasks ?? []
-  ElMessage.success(deactivated.length > 0 ? `已刪除，並停用了 ${deactivated.length} 個任務` : '已刪除')
-  load()
+    const result = await deleteTaskGroup(group.id)
+    const deactivated = result.deactivated_tasks ?? []
+    ElMessage.success(deactivated.length > 0 ? `已刪除，並停用了 ${deactivated.length} 個任務` : '已刪除')
+    load()
+  } catch (err) {
+    if (err === 'cancel' || err === 'close') return
+    ElMessage.error((err as Error).message || '刪除群組失敗')
+  }
 }
 </script>
 
@@ -68,26 +85,17 @@ async function handleDelete(group: TaskGroup) {
     <div class="toolbar">
       <el-input v-model="filters.name" placeholder="名稱篩選" clearable style="width: 160px" @change="reloadFromFirstPage" @clear="reloadFromFirstPage" />
       <el-select v-model="filters.status" placeholder="狀態篩選" clearable style="width: 140px" @change="reloadFromFirstPage">
-        <el-option label="啟用" value="active" />
-        <el-option label="停用" value="inactive" />
-      </el-select>
-      <el-select v-model="filters.sort_field" placeholder="排序欄位" clearable style="width: 140px" @change="reloadFromFirstPage">
-        <el-option label="名稱" value="name" />
-        <el-option label="建立時間" value="created_at" />
-        <el-option label="狀態" value="status" />
-      </el-select>
-      <el-select v-model="filters.sort_order" style="width: 100px" @change="reloadFromFirstPage">
-        <el-option label="正序" value="asc" />
-        <el-option label="倒序" value="desc" />
+        <el-option label="啟用" value="enabled" />
+        <el-option label="停用" value="disabled" />
       </el-select>
       <IconButton :icon="Plus" label="新增群組" type="primary" @click="router.push('/groups/new')" />
       <IconButton :icon="Refresh" label="重新整理" :loading="loading" @click="load" />
     </div>
 
-    <el-table :data="groups" style="width: 100%">
-      <el-table-column prop="name" label="名稱" />
+    <el-table :data="groups" style="width: 100%" @sort-change="handleSortChange">
+      <el-table-column prop="name" label="名稱" sortable="custom" />
       <el-table-column prop="description" label="描述" />
-      <el-table-column label="狀態" width="100">
+      <el-table-column label="狀態" prop="status" width="100" sortable="custom">
         <template #default="{ row }"><StatusTag :status="row.status" /></template>
       </el-table-column>
       <el-table-column label="操作" width="100">

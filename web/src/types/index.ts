@@ -9,11 +9,11 @@ export interface ApiEnvelope<T> {
 export interface User {
   id: string
   user_name: string
-  status: boolean
+  status: Status
 }
 
 export type TaskType = 'http' | 'rpc'
-export type ActiveStatus = 'active' | 'inactive'
+export type Status = 'enabled' | 'disabled'
 export type ExecutionStatus = 'success' | 'failed'
 export type SortField = 'name' | 'created_at' | 'status' | 'schedule'
 export type SortOrder = 'asc' | 'desc'
@@ -22,7 +22,7 @@ export interface TaskGroup {
   id: string
   name: string
   description: string
-  status: ActiveStatus
+  status: Status
   created_by: string
   updated_by: string
   created_at: number
@@ -39,7 +39,7 @@ export interface Task {
   endpoint: string
   method: string
   payload: string
-  status: ActiveStatus
+  status: Status
   created_by: string
   updated_by: string
   created_at: number
@@ -56,14 +56,14 @@ export type TaskWriteDTO = {
   endpoint: string
   method: string
   payload: string
-  status?: ActiveStatus
+  status?: Status
   user_id: string
 }
 
 export type TaskGroupWriteDTO = {
   name: string
   description: string
-  status?: ActiveStatus
+  status?: Status
   user_id: string
 }
 
@@ -107,4 +107,28 @@ export interface DeactivatedTaskRef {
 
 export interface DeleteTaskGroupResult {
   deactivated_tasks: DeactivatedTaskRef[]
+}
+
+export interface RunTaskParams {
+  repeat: number
+  interval_ms: number
+}
+
+export interface RunTaskResult {
+  task_id: string
+  repeat: number
+  interval_ms: number
+}
+
+export type UserWriteDTO = {
+  user_name: string
+  password?: string
+  status?: Status
+}
+
+export interface ListUsersResult {
+  users: User[]
+  total: number
+  limit: number
+  offset: number
 }

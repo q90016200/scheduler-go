@@ -5,10 +5,11 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Document, Edit, Plus, Refresh, View, VideoPlay } from '@element-plus/icons-vue'
 import TaskForm from '../components/TaskForm.vue'
 import IconButton from '../components/IconButton.vue'
-import { createTask, deleteTask, listTasks, runTask, updateTask, updateTaskStatus } from '../api/tasks'
+import RunTaskDialog from '../components/RunTaskDialog.vue'
+import { createTask, deleteTask, listTasks, updateTask, updateTaskStatus } from '../api/tasks'
 import { listTaskGroups } from '../api/taskGroups'
 import { useAuthStore } from '../stores/auth'
-import type { ActiveStatus, SortField, SortOrder, Task, TaskGroup, TaskWriteDTO } from '../types'
+import type { Status, SortField, SortOrder, Task, TaskGroup, TaskWriteDTO } from '../types'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -21,7 +22,8 @@ const pageSize = 20
 const dialogVisible = ref(false)
 const editingTask = ref<Task>()
 const saving = ref(false)
-const runningIds = ref(new Set<string>())
+const runDialogVisible = ref(false)
+const runningTask = ref<Task>()
 const statusUpdatingIds = ref(new Set<string>())
 const loading = ref(false)
 const formRef = ref<InstanceType<typeof TaskForm>>()
@@ -57,6 +59,12 @@ function reloadFromFirstPage() {
   load()
 }
 
+function handleSortChange({ prop, order }: { prop: string; order: 'ascending' | 'descending' | null }) {
+  filters.sort_field = order ? (prop as SortField) : ''
+  filters.sort_order = order === 'ascending' ? 'asc' : 'desc'
+  reloadFromFirstPage()
+}
+
 onMounted(async () => {
   // ponytail: 下拉選單需要「全部群組」，用大 limit 取代真正的全量 API；群組數量大到 1000 筆時再改成搜尋式下拉
   groups.value = (await listTaskGroups({ limit: 1000 })).groups
@@ -70,19 +78,12 @@ async function handleDelete(task: Task) {
   load()
 }
 
-async function handleRun(task: Task) {
-  runningIds.value.add(task.id)
-  try {
-    await runTask(task.id)
-    ElMessage.success('已觸發執行，請至執行紀錄查看結果')
-  } catch (err) {
-    ElMessage.error((err as Error).message || '觸發執行失敗')
-  } finally {
-    runningIds.value.delete(task.id)
-  }
+function openRunDialog(task: Task) {
+  runningTask.value = task
+  runDialogVisible.value = true
 }
 
-async function handleStatusChange(task: Task, status: ActiveStatus) {
+async function handleStatusChange(task: Task, status: Status) {
   statusUpdatingIds.value.add(task.id)
   try {
     await updateTaskStatus(task.id, status, auth.user?.id ?? '')
@@ -133,38 +134,28 @@ async function handleSubmit(payload: TaskWriteDTO) {
         <el-option v-for="g in groups" :key="g.id" :label="g.name" :value="g.id" />
       </el-select>
       <el-select v-model="filters.status" placeholder="狀態篩選" clearable style="width: 140px" @change="reloadFromFirstPage">
-        <el-option label="啟用" value="active" />
-        <el-option label="停用" value="inactive" />
-      </el-select>
-      <el-select v-model="filters.sort_field" placeholder="排序欄位" clearable style="width: 140px" @change="reloadFromFirstPage">
-        <el-option label="名稱" value="name" />
-        <el-option label="建立時間" value="created_at" />
-        <el-option label="狀態" value="status" />
-        <el-option label="排程" value="schedule" />
-      </el-select>
-      <el-select v-model="filters.sort_order" style="width: 100px" @change="reloadFromFirstPage">
-        <el-option label="正序" value="asc" />
-        <el-option label="倒序" value="desc" />
+        <el-option label="啟用" value="enabled" />
+        <el-option label="停用" value="disabled" />
       </el-select>
       <IconButton :icon="Plus" label="新增任務" type="primary" @click="openCreate" />
       <IconButton :icon="Refresh" label="重新整理" :loading="loading" @click="load" />
     </div>
 
-    <el-table :data="tasks" style="width: 100%">
-      <el-table-column prop="name" label="名稱" />
+    <el-table :data="tasks" style="width: 100%" @sort-change="handleSortChange">
+      <el-table-column prop="name" label="名稱" sortable="custom" />
       <el-table-column prop="group.name" label="群組" />
       <el-table-column prop="type" label="類型" width="80" />
-      <el-table-column prop="schedule" label="排程" />
-      <el-table-column label="狀態" width="140">
+      <el-table-column prop="schedule" label="排程" sortable="custom" />
+      <el-table-column label="狀態" prop="status" width="140" sortable="custom">
         <template #default="{ row }">
           <el-switch
             :model-value="row.status"
-            active-value="active"
-            inactive-value="inactive"
+            active-value="enabled"
+            inactive-value="disabled"
             active-text="啟用"
             inactive-text="停用"
             :loading="statusUpdatingIds.has(row.id)"
-            @change="(val: ActiveStatus) => handleStatusChange(row, val)"
+            @change="(val: Status) => handleStatusChange(row, val)"
           />
         </template>
       </el-table-column>
@@ -173,7 +164,7 @@ async function handleSubmit(payload: TaskWriteDTO) {
           <el-button-group>
             <IconButton :icon="View" label="詳情" @click="router.push(`/tasks/${row.id}`)" />
             <IconButton :icon="Edit" label="編輯" @click="openEdit(row)" />
-            <IconButton :icon="VideoPlay" label="立即執行" :loading="runningIds.has(row.id)" @click="handleRun(row)" />
+            <IconButton :icon="VideoPlay" label="立即執行" @click="openRunDialog(row)" />
             <IconButton :icon="Document" label="執行紀錄" @click="router.push(`/tasks/${row.id}/executions`)" />
             <IconButton :icon="Delete" label="刪除" type="danger" @click="handleDelete(row)" />
           </el-button-group>
@@ -197,6 +188,8 @@ async function handleSubmit(payload: TaskWriteDTO) {
         <el-button type="primary" :loading="saving" @click="formRef?.handleSubmit()">儲存</el-button>
       </template>
     </el-dialog>
+
+    <RunTaskDialog v-if="runDialogVisible" v-model:visible="runDialogVisible" :task="runningTask" />
   </el-card>
 </template>
 

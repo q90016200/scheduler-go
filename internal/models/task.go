@@ -1,7 +1,8 @@
 package models
 
-const TASK_STATUS_ACTIVE = "active"
-const TASK_STATUS_INACTIVE = "inactive"
+// STATUS_ENABLED/STATUS_DISABLED 共用於 Task、TaskGroup、User 的狀態欄位
+const STATUS_ENABLED = "enabled"
+const STATUS_DISABLED = "disabled"
 
 // Task 任務表 (tasks)
 type Task struct {
@@ -14,7 +15,7 @@ type Task struct {
 	Endpoint    string     `json:"endpoint" gorm:"column:endpoint"`
 	Method      string     `json:"method" gorm:"column:method;size:255"`
 	Payload     string     `json:"payload" gorm:"column:payload"`
-	Status      string     `json:"status" gorm:"column:status;size:10"` // 狀態 ('active', 'inactive')
+	Status      string     `json:"status" gorm:"column:status;size:10"` // 狀態 ('enabled', 'disabled')
 	CreatedBy   string     `json:"created_by" gorm:"column:created_by;size:20"`
 	UpdatedBy   string     `json:"updated_by" gorm:"column:updated_by;size:20"`
 	CreatedAt   int64      `json:"created_at" gorm:"column:created_at;autoCreateTime;<-:create"`
@@ -27,7 +28,7 @@ type TaskGroup struct {
 	ID          string `json:"id" gorm:"primaryKey;size:20"`
 	Name        string `json:"name" gorm:"size:50"`
 	Description string `json:"description"`
-	Status      string `json:"status" gorm:"not null;size:10"` // 群組狀態 ('active', 'inactive')
+	Status      string `json:"status" gorm:"not null;size:10"` // 群組狀態 ('enabled', 'disabled')
 	CreatedBy   string `json:"created_by" gorm:"size:20"`
 	UpdatedBy   string `json:"updated_by" gorm:"size:20"`
 	CreatedAt   int64  `json:"created_at" gorm:"autoCreateTime;<-:create"`
@@ -43,7 +44,7 @@ type CreateTaskReq struct {
 	EndPoint    string  `json:"endpoint" validate:"required"`
 	Method      string  `json:"method"`
 	Payload     string  `json:"payload"`
-	Status      string  `json:"status" validate:"omitempty,oneof=active inactive"`
+	Status      string  `json:"status" validate:"omitempty,oneof=enabled disabled"`
 	UserId      string  `json:"user_id"`
 }
 
@@ -56,26 +57,33 @@ type UpdateTaskReq struct {
 	EndPoint    string  `json:"endpoint" validate:"required"`
 	Method      string  `json:"method"`
 	Payload     string  `json:"payload"`
-	Status      string  `json:"status" validate:"omitempty,oneof=active inactive"`
+	Status      string  `json:"status" validate:"omitempty,oneof=enabled disabled"`
 	UserId      string  `json:"user_id"`
 }
 
 type CreateTaskGroupReq struct {
 	Name        string `json:"name" validate:"required"`
 	Description string `json:"description"`
-	Status      string `json:"status" validate:"omitempty,oneof=active inactive"`
+	Status      string `json:"status" validate:"omitempty,oneof=enabled disabled"`
 	UserId      string `json:"user_id"`
 }
 
 type UpdateTaskGroupReq struct {
 	Name        string `json:"name" validate:"required"`
 	Description string `json:"description"`
-	Status      string `json:"status" validate:"omitempty,oneof=active inactive"`
+	Status      string `json:"status" validate:"omitempty,oneof=enabled disabled"`
 	UserId      string `json:"user_id"`
 }
 
 // UpdateTaskStatusReq 只切換任務啟用/停用狀態，不需送整包任務資料
 type UpdateTaskStatusReq struct {
-	Status string `json:"status" validate:"required,oneof=active inactive"`
+	Status string `json:"status" validate:"required,oneof=enabled disabled"`
 	UserId string `json:"user_id"`
+}
+
+// RunTaskRequest 立即執行任務的參數；Repeat/IntervalMs 為 0（未帶 body 或欄位省略）時
+// 由 controller 補上預設值 1 次 / 1000ms，不當成驗證錯誤
+type RunTaskRequest struct {
+	Repeat     int `json:"repeat" validate:"omitempty,min=1,max=50"`
+	IntervalMs int `json:"interval_ms" validate:"omitempty,min=100,max=60000"`
 }

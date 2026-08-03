@@ -5,10 +5,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/q90016200/scheduler-go/internal/app"
 	"github.com/q90016200/scheduler-go/internal/models"
+	"github.com/q90016200/scheduler-go/internal/scheduler"
 	"github.com/q90016200/scheduler-go/pkg/logger"
 	"github.com/q90016200/scheduler-go/pkg/response"
 	"github.com/q90016200/scheduler-go/pkg/utils"
 	"gorm.io/gorm"
+	"io"
 	"net/http"
 	"strconv"
 )
@@ -95,7 +97,7 @@ func (ctrl *TaskController) CreateTaskHandler(c *gin.Context) {
 
 	// 當請求參數 status 未傳入時，預設為不啟動
 	if req.Status == "" {
-		req.Status = models.TASK_STATUS_INACTIVE
+		req.Status = models.STATUS_DISABLED
 	}
 
 	task, err := ctrl.services.TaskServices.CreateTask(req)
@@ -183,26 +185,71 @@ func (ctrl *TaskController) UpdateTaskStatusHandler(c *gin.Context) {
 	response.Success(c, task, "任務狀態已更新")
 }
 
-// RunTaskHandler 立即執行一次任務
+// RunTaskHandler 立即執行任務，可帶 repeat/interval_ms 指定重複次數與呼叫間隔；body 可省略，預設執行 1 次
 func (ctrl *TaskController) RunTaskHandler(c *gin.Context) {
+	log := logger.WithTrace(c)
+
 	id := c.Param("id")
 	if id == "" {
 		response.Fail(c, http.StatusBadRequest, "id is empty", nil)
 		return
 	}
 
-	task, err := ctrl.services.TaskServices.RunTaskNow(id)
+	var req models.RunTaskRequest
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		log.Info(err.Error())
+		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
+		return
+	}
+	if err := utils.MyValidator.Struct(req); err != nil {
+		log.Info(err.Error())
+		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
+		return
+	}
+	if req.Repeat == 0 {
+		req.Repeat = 1
+	}
+	if req.IntervalMs == 0 {
+		req.IntervalMs = 1000
+	}
+
+	task, err := ctrl.services.TaskServices.RunTaskNow(id, req.Repeat, req.IntervalMs)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.Fail(c, http.StatusNotFound, "任務不存在", nil)
 			return
 		}
-		logger.WithTrace(c).Error(err.Error())
+		if errors.Is(err, scheduler.ErrBatchAlreadyRunning) {
+			response.Fail(c, http.StatusConflict, "該任務已有執行中的批次", nil)
+			return
+		}
+		log.Error(err.Error())
 		response.Fail(c, http.StatusInternalServerError, "執行任務失敗", nil)
 		return
 	}
 
-	response.Success(c, task, "已觸發執行")
+	response.Success(c, gin.H{"task_id": task.ID, "repeat": req.Repeat, "interval_ms": req.IntervalMs}, "已觸發執行")
+}
+
+// CancelTaskRunHandler 取消任務目前進行中的「立即執行」重複批次
+func (ctrl *TaskController) CancelTaskRunHandler(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		response.Fail(c, http.StatusBadRequest, "id is empty", nil)
+		return
+	}
+
+	if err := ctrl.services.TaskServices.CancelRunNow(id); err != nil {
+		if errors.Is(err, scheduler.ErrBatchNotFound) {
+			response.Fail(c, http.StatusNotFound, "找不到該任務進行中的批次", nil)
+			return
+		}
+		logger.WithTrace(c).Error(err.Error())
+		response.Fail(c, http.StatusInternalServerError, "取消執行失敗", nil)
+		return
+	}
+
+	response.Success(c, nil, "已取消")
 }
 
 // DeleteTaskHandler 刪除任務
@@ -299,7 +346,7 @@ func (ctrl *TaskController) CreateTaskGroupHandler(c *gin.Context) {
 
 	// 當請求參數 status 未傳入時，預設為不啟動
 	if req.Status == "" {
-		req.Status = models.TASK_STATUS_INACTIVE
+		req.Status = models.STATUS_DISABLED
 	}
 
 	task, err := ctrl.services.TaskServices.CreateTaskGroup(req)

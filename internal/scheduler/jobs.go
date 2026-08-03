@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -48,16 +49,79 @@ func RegisterTaskJob(cs *CronScheduler, id string, task *models.Task) error {
 	return nil
 }
 
-// RunTaskNow 立即執行一次任務（不經過 cron 排程），沿用既有的執行與 logExecution 邏輯
-func RunTaskNow(cs *CronScheduler, task *models.Task) error {
+// ErrBatchAlreadyRunning 同一任務同時只允許一個進行中的「立即執行」重複批次
+var ErrBatchAlreadyRunning = errors.New("task already has a running batch")
+
+// ErrBatchNotFound CancelTaskRun 找不到該任務目前進行中的批次
+var ErrBatchNotFound = errors.New("no running batch for task")
+
+// jobFor 依 task.Type 回傳對應的單次執行 closure；未知 type 立刻回錯，
+// 讓 RunTaskNow 在開 goroutine 前就能讓呼叫端知道參數不對，而不是靜默不執行。
+func jobFor(cs *CronScheduler, task *models.Task) (func(), error) {
 	switch task.Type {
 	case "http":
-		RunRequestHttp(cs.Log, cs.db, cs.restyClient, task)()
+		return RunRequestHttp(cs.Log, cs.db, cs.restyClient, task), nil
 	case "rpc":
-		RunRequestRpc(cs.Log, cs.db, task)()
+		return RunRequestRpc(cs.Log, cs.db, task), nil
 	default:
-		return fmt.Errorf("unknown task type: %s", task.Type)
+		return nil, fmt.Errorf("unknown task type: %s", task.Type)
 	}
+}
+
+// RunTaskNow 立即執行任務，不經過 cron 排程，也不受 SkipIfStillRunning 影響（可能與排程執行重疊）。
+// 非同步執行 repeat 次、每次間隔 intervalMs 毫秒，呼叫後立即回傳；每次執行沿用既有的 logExecution 邏輯。
+// 中途某次執行失敗不會中斷剩下的次數。同一任務同時只允許一個進行中的批次。
+func RunTaskNow(cs *CronScheduler, task *models.Task, repeat int, intervalMs int) error {
+	runOnce, err := jobFor(cs, task)
+	if err != nil {
+		return err
+	}
+
+	cs.runBatchesMu.Lock()
+	if _, exists := cs.runBatches[task.ID]; exists {
+		cs.runBatchesMu.Unlock()
+		return ErrBatchAlreadyRunning
+	}
+	ctx, cancel := context.WithCancel(cs.baseCtx)
+	cs.runBatches[task.ID] = cancel
+	cs.runBatchesMu.Unlock()
+
+	go func() {
+		defer func() {
+			cancel()
+			cs.runBatchesMu.Lock()
+			delete(cs.runBatches, task.ID)
+			cs.runBatchesMu.Unlock()
+		}()
+		for i := 0; i < repeat; i++ {
+			if ctx.Err() != nil {
+				return
+			}
+			runOnce()
+			if i == repeat-1 {
+				return
+			}
+			// ponytail: 取消只在兩次呼叫之間生效，進行中的那一發仍會跑完各自的 10s timeout；
+			// 要中斷進行中的請求需讓 RunRequestHttp/RunRequestRpc 收 ctx，範圍較大，先不做
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Duration(intervalMs) * time.Millisecond):
+			}
+		}
+	}()
+	return nil
+}
+
+// CancelTaskRun 取消任務目前進行中的「立即執行」重複批次，只阻止尚未發出的下一次執行
+func CancelTaskRun(cs *CronScheduler, taskID string) error {
+	cs.runBatchesMu.Lock()
+	cancel, exists := cs.runBatches[taskID]
+	cs.runBatchesMu.Unlock()
+	if !exists {
+		return ErrBatchNotFound
+	}
+	cancel()
 	return nil
 }
 
@@ -189,6 +253,9 @@ func RunRequestRpc(log *logger.LogrusAdapter, db *gorm.DB, task *models.Task) fu
 // logExecution 寫入一筆任務執行紀錄，寫入失敗只記 log，不影響該 task 的 cron 排程本身
 // ponytail: 目前是同步寫入，若排程量大到 DB 寫入變瓶頸，再改成非同步/批次寫入
 func logExecution(db *gorm.DB, log *logger.LogrusAdapter, taskID string, startedAt int64, status, output, errMsg string) {
+	if db == nil {
+		return
+	}
 	entry := &models.TaskExecutionLog{
 		ID:         xid.New().String(),
 		TaskID:     taskID,

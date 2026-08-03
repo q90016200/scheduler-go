@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"fmt"
 	"github.com/go-resty/resty/v2"
 	"github.com/q90016200/scheduler-go/config"
@@ -22,18 +23,26 @@ type CronScheduler struct {
 	mu               sync.Mutex              // 保證多協程安全
 	db               *gorm.DB
 	restyClient      *resty.Client
+	runBatches       map[string]context.CancelFunc // Task ID 對應其進行中的「立即執行」重複批次，供取消用
+	runBatchesMu     sync.Mutex                    // 保證多協程安全，與 mu 分開避免不相關操作互相卡鎖
+	baseCtx          context.Context               // 所有批次共同的父 context，Stop 時一併取消尚未跑完的批次
+	baseCancel       context.CancelFunc
 }
 
 func NewCronScheduler(db *gorm.DB) *CronScheduler {
 	//log := logger.Init("../../logs/cron.log")
 	log := logger.Log
 	cronLogger := &logger.LogrusAdapter{Logger: log}
+	baseCtx, baseCancel := context.WithCancel(context.Background())
 	return &CronScheduler{
 		Cron:             cron.New(cron.WithChain(cron.Recover(cronLogger), cron.SkipIfStillRunning(cronLogger))),
 		Log:              cronLogger,
 		taskCronEntryIDs: make(map[string]cron.EntryID),
 		db:               db,
 		restyClient:      newSSRFGuardedRestyClient(),
+		runBatches:       make(map[string]context.CancelFunc),
+		baseCtx:          baseCtx,
+		baseCancel:       baseCancel,
 	}
 }
 
@@ -65,7 +74,7 @@ func (cs *CronScheduler) StartScheduler() {
 	_, err := cs.Cron.AddFunc("* * * * *", func() {
 		cs.Log.Info(fmt.Sprintf("[cron] Running cron scheduler jobs, registered=%d", cs.jobCount()))
 		var tasks []models.Task
-		err := cs.db.Where("status = ?", models.TASK_STATUS_ACTIVE).
+		err := cs.db.Where("status = ?", models.STATUS_ENABLED).
 			Order("created_at ASC").
 			Preload("Group").
 			Find(&tasks).Error
@@ -102,10 +111,13 @@ func (cs *CronScheduler) StartScheduler() {
 	cs.Cron.Start()
 }
 
-// StopCronScheduler 停止排程器
+// StopCronScheduler 停止排程器，並取消所有進行中的「立即執行」重複批次（已發出的請求仍會跑完）
 func (cs *CronScheduler) StopCronScheduler() {
 	if cs.Cron != nil {
 		cs.Cron.Stop()
 		cs.Log.Info("排程器已停止")
+	}
+	if cs.baseCancel != nil {
+		cs.baseCancel()
 	}
 }
