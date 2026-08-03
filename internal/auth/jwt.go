@@ -16,7 +16,7 @@ func GenerateToken(userID string) (string, error) {
 	claims := &Claims{
 		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(config.AppConfig.TokenExpiry * time.Second)), // 設定有效期
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(config.AppConfig.TokenExpirySeconds) * time.Second)), // 設定有效期
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

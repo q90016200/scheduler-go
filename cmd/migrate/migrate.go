@@ -10,7 +10,7 @@ import (
 
 func main() {
 	// 載入配置
-	config.LoadConfig(".env")
+	config.LoadConfig()
 
 	// 初始化資料庫
 	_, err := database.InitializeDB()

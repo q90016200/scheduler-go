@@ -101,14 +101,14 @@ func (h *fileHook) Fire(entry *logrus.Entry) error {
 	return err
 }
 
-// resolveLogLevel 由 LOG_LEVEL 環境變數決定，未設定時開發環境預設 debug、其餘預設 info
+// resolveLogLevel 由 LOG_LEVEL 決定，未設定時開發環境預設 debug、其餘預設 info
 func resolveLogLevel() logrus.Level {
-	if levelStr := os.Getenv("LOG_LEVEL"); levelStr != "" {
+	if levelStr := config.AppConfig.LogLevel; levelStr != "" {
 		if level, err := logrus.ParseLevel(levelStr); err == nil {
 			return level
 		}
 	}
-	if config.AppConfig.AppEnv == "development" {
+	if config.AppConfig.IsDevelopment() {
 		return logrus.DebugLevel
 	}
 	return logrus.InfoLevel

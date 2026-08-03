@@ -20,7 +20,7 @@ import (
 
 func main() {
 	// 載入配置
-	config.LoadConfig(".env")
+	config.LoadConfig()
 
 	// 初始化日誌
 	logger.Init("logs/app.log")
@@ -39,6 +39,9 @@ func main() {
 	services := app.NewAppServices(db, cronScheduler)
 
 	// 初始化 Gin 引擎 & 註冊路由
+	if !config.AppConfig.IsDevelopment() {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	r := gin.Default()
 	r = router.SetupRouter(r, services)
 

@@ -10,7 +10,6 @@ import (
 	"github.com/q90016200/scheduler-go/pkg/response"
 	"gorm.io/gorm"
 	"net/http"
-	"time"
 )
 
 type AuthController struct {
@@ -71,7 +70,7 @@ func (ctrl *AuthController) LoginHandler(c *gin.Context) {
 	}
 
 	// 设置 HttpOnly cookie
-	c.SetCookie("auth_token", token, int(config.AppConfig.TokenExpiry*time.Second), "/", config.AppConfig.ServerDomain, false, true) // `true` 表示 HttpOnly
+	c.SetCookie("auth_token", token, config.AppConfig.TokenExpirySeconds, "/", config.AppConfig.ServerDomain, false, true) // `true` 表示 HttpOnly
 
 	response.Success(c, gin.H{
 		"token": token,

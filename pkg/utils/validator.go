@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	"github.com/q90016200/scheduler-go/internal/models"
 	"github.com/robfig/cron/v3"
 	"regexp"
 	"strconv"
@@ -22,7 +21,6 @@ func init() {
 	MyValidator.RegisterValidation("length", checkLength)
 	MyValidator.RegisterValidation("prec", checkPrecision)
 	MyValidator.RegisterValidation("cron", checkCronExpr)
-	MyValidator.RegisterStructValidation(validateTaskMethod, models.CreateTaskReq{}, models.UpdateTaskReq{})
 }
 
 // checkCronExpr 驗證欄位是否為合法的標準 cron 表達式（與 scheduler 實際使用的解析器一致）
@@ -31,9 +29,10 @@ func checkCronExpr(fl validator.FieldLevel) bool {
 	return err == nil
 }
 
-// validateTaskMethod 依 Task.Type 檢查 Method 欄位：
+// ValidateTaskMethod 依 Task.Type 檢查 Method 欄位：
 // http 任務的 Method 必須是 HTTP 動詞；rpc 任務的 Method 視為 "package.Service/MethodName"，只要求非空。
-func validateTaskMethod(sl validator.StructLevel) {
+// 註冊於 internal/models/validation.go，函式留在此處以避免 pkg/utils 依賴 internal/models。
+func ValidateTaskMethod(sl validator.StructLevel) {
 	current := sl.Current()
 	taskType := current.FieldByName("Type").String()
 	methodField := current.FieldByName("Method")

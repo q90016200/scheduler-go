@@ -13,6 +13,7 @@ import (
 	"github.com/jhump/protoreflect/dynamic/grpcdynamic"
 	"github.com/jhump/protoreflect/grpcreflect"
 	"github.com/q90016200/scheduler-go/internal/models"
+	"github.com/q90016200/scheduler-go/internal/ssrf"
 	"github.com/q90016200/scheduler-go/pkg/logger"
 	"github.com/q90016200/scheduler-go/pkg/utils"
 	"github.com/robfig/cron/v3"
@@ -193,7 +194,7 @@ func RunRequestRpc(log *logger.LogrusAdapter, db *gorm.DB, task *models.Task) fu
 		conn, err := grpc.NewClient(task.Endpoint,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
-				return utils.SafeDialContext(ctx, "tcp", addr)
+				return ssrf.SafeDialContext(ctx, "tcp", addr)
 			}),
 		)
 		if err != nil {

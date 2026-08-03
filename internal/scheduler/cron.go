@@ -6,8 +6,8 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/q90016200/scheduler-go/config"
 	"github.com/q90016200/scheduler-go/internal/models"
+	"github.com/q90016200/scheduler-go/internal/ssrf"
 	"github.com/q90016200/scheduler-go/pkg/logger"
-	"github.com/q90016200/scheduler-go/pkg/utils"
 	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
 	"net/http"
@@ -47,9 +47,9 @@ func NewCronScheduler(db *gorm.DB) *CronScheduler {
 }
 
 // newSSRFGuardedRestyClient 建立一個限制連線目標的 resty client，避免無 auth 的 http 任務
-// 被當作 SSRF 跳板探測 loopback / link-local / metadata 位址（見 pkg/utils.SafeDialContext）
+// 被當作 SSRF 跳板探測 loopback / link-local / metadata 位址（見 internal/ssrf.SafeDialContext）
 func newSSRFGuardedRestyClient() *resty.Client {
-	transport := &http.Transport{DialContext: utils.SafeDialContext}
+	transport := &http.Transport{DialContext: ssrf.SafeDialContext}
 	return resty.New().SetTimeout(10 * time.Second).SetTransport(transport)
 }
 
