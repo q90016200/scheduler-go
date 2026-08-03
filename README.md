@@ -18,6 +18,7 @@ scheduler-tool/
 │   │   └── database.go
 │   ├── controllers/        # 控制器層（處理 API 請求）
 │   │   ├── auth_controller.go
+│   │   ├── user_controller.go           # 使用者管理控制器
 │   │   ├── task_controller.go           # 任務與群組管理控制器
 │   │   └── task_execution_log_controller.go # 任務執行紀錄控制器
 │   ├── models/             # 資料結構和資料庫模型
@@ -26,6 +27,7 @@ scheduler-tool/
 │   │   └── task_execution_log.go  # 任務執行紀錄模型
 │   ├── services/           # 業務邏輯層，直接操作 *gorm.DB（無獨立的 repositories 層）
 │   │   ├── auth_service.go
+│   │   ├── user_service.go            # 使用者管理服務
 │   │   ├── task_service.go            # 任務與群組服務
 │   │   └── task_execution_log_service.go # 任務執行紀錄服務
 │   ├── scheduler/          # cron 排程器，執行 http/rpc 任務、記錄執行結果、清除過期紀錄
@@ -83,7 +85,7 @@ scheduler-tool/
    go run main.go
    ```
 
-   監聽 `SERVER_PORT`（預設 `8080`）。啟動後 cron 排程器會每分鐘掃描 `status = active` 的任務並執行。
+   監聽 `SERVER_PORT`（預設 `8080`）。啟動後 cron 排程器會每分鐘掃描 `status = enabled` 的任務並執行。
 
 5. **啟動前端**
 
@@ -95,7 +97,7 @@ scheduler-tool/
    go test ./...
    ```
 
-   涵蓋 `internal/scheduler`（cron 註冊/錯誤路徑）與 `pkg/utils`（SSRF 連線防護）。排程相關程式碼可另外用 `go test -race ./internal/scheduler/...` 檢查併發安全。
+   涵蓋 `internal/scheduler`（cron 註冊/錯誤路徑，以及立即執行的重複次數、併發批次拒絕、取消）與 `pkg/utils`（SSRF 連線防護）。排程相關程式碼可另外用 `go test -race ./internal/scheduler/...` 檢查併發安全。
 
 ## 環境變數 (.env)
 
@@ -117,16 +119,22 @@ scheduler-tool/
 
 > **登入/註冊目前暫時停用**：`JWTAuthMiddleware` 未掛載在任何路由上，前端也拿掉了未登入導向 `/login` 的守衛，所有端點與頁面皆可直接使用，不需登入。以下「需登入」標註為停用前的原始設計，之後要恢復可參考 `internal/router/router.go`。
 
-**Auth**（`/api/auth`）：`POST /register`、`POST /login`（設定 `auth_token` HttpOnly cookie）、`POST /logout`、`GET /me`（取得目前使用者，需帶有效 cookie 才有意義）。
+**Auth**（`/api/auth`）：`POST /register`、`POST /login`（設定 `auth_token` HttpOnly cookie；帳號 `status` 為 `disabled` 時登入會被拒絕）、`POST /logout`、`GET /me`（取得目前使用者，需帶有效 cookie 才有意義）。
+
+**User**（`/api/users`）：
+- `GET /`（清單，可用 `name`（模糊比對）/`limit`/`offset`）、`GET /:id`、`POST /`、`PUT /:id`（`password` 留空代表不更改密碼）、`DELETE /:id`
+- `PATCH /:id/status`（body 僅需 `{"status": "enabled"|"disabled"}`，只切換啟用狀態）
+- 密碼一律以 bcrypt 雜湊儲存；`status` 沿用 Task/TaskGroup 共用的 `enabled`/`disabled` 慣例。
 
 **Task**（`/api/tasks`）：
 - `GET /`（清單，可用 `status`/`group_id`/`name`（模糊比對）/`sort_field`/`sort_order`/`limit`/`offset` 查詢參數）
 - `GET /:id`、`POST /`、`PUT /:id`（整包更新，`name`/`schedule`/`type`/`endpoint` 皆為必填）、`DELETE /:id`
-- `PATCH /:id/status`（body 僅需 `{"status": "active"|"inactive", "user_id": "..."}`，只切換啟用狀態，不需送整包任務資料）
-- `POST /:id/run`（立即觸發一次，不受排程狀態影響）
+- `PATCH /:id/status`（body 僅需 `{"status": "enabled"|"disabled", "user_id": "..."}`，只切換啟用狀態，不需送整包任務資料）
+- `POST /:id/run`（立即執行，不受排程狀態影響；非同步觸發，呼叫後立刻回傳）。body 可選帶 `{"repeat": 1-50, "interval_ms": 100-60000}` 指定重複執行次數與每次呼叫的間隔毫秒數，省略時預設執行 1 次；同一任務同時只允許一個進行中的重複批次，重複觸發會回 409。中途某次執行失敗不會中斷剩下的次數，每次執行都各自寫入一筆執行紀錄。
+- `DELETE /:id/run`（取消該任務目前進行中的重複批次，只會阻止尚未發出的下一次執行，已送出的那一發仍會跑完；找不到進行中的批次回 404）
 - 建立/更新時 `type` 限定 `http`/`rpc`、`schedule` 必須是合法的標準 cron 表達式，兩者驗證失敗會在寫入資料庫前被擋下（回 400），不會留下無法排程的孤兒資料。
 
-**TaskGroup**（`/api/tasks/group`）：`GET /`（可用 `status`/`name`/`sort_field`/`sort_order`/`limit`/`offset`）、`GET /:id`、`POST /`、`PUT /:id`、`DELETE /:id`。將群組 `PUT` 成 `inactive`，或直接 `DELETE` 群組，都會連動把該群組底下仍為 `active` 的任務改成 `inactive` 並取消排程（`DELETE` 的回應會帶 `deactivated_tasks: [{id, name}]`，供前端提示使用者哪些任務被停用了）；改回 `active` 不會自動恢復子任務，需個別開啟。
+**TaskGroup**（`/api/tasks/group`）：`GET /`（可用 `status`/`name`/`sort_field`/`sort_order`/`limit`/`offset`）、`GET /:id`、`POST /`、`PUT /:id`、`DELETE /:id`。將群組 `PUT` 成 `disabled`，或直接 `DELETE` 群組，都會連動把該群組底下仍為 `enabled` 的任務改成 `disabled` 並取消排程（`DELETE` 的回應會帶 `deactivated_tasks: [{id, name}]`，供前端提示使用者哪些任務被停用了）；改回 `enabled` 不會自動恢復子任務，需個別開啟。刪除群組不會刪除底下的任務，只會解除關聯（任務的 `group_id` 變成 `null`）——前端刪除前的確認對話框會列出底下所有任務（含已停用）的總數與名稱，避免使用者不知道這件事。
 
 **執行紀錄**（`/api/tasks/logs`）：`GET /`（可用 `task_id`/`task_name`/`group_id` 篩選，`limit`/`offset` 分頁，回傳每筆會帶 `task.name`/`task.group.name`）、`GET /:id`（同樣帶 `task` 資訊）。刪除任務會連動刪除其執行紀錄（外鍵 `ON DELETE CASCADE`）。
 
