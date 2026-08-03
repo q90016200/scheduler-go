@@ -2,7 +2,6 @@ package router
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/q90016200/scheduler-go/config"
 	"github.com/q90016200/scheduler-go/internal/app"
 	"github.com/q90016200/scheduler-go/internal/controllers"
 	"github.com/q90016200/scheduler-go/internal/middleware"
@@ -17,11 +16,6 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 	authController := controllers.NewAuthController(services)
 	execLogController := controllers.NewTaskExecutionLogController(services)
 	userController := controllers.NewUserController(services)
-
-	// 開發模式下前端走 Vite dev server（不同 origin），需要 CORS；正式環境同源部署不需要
-	if config.AppConfig.AppEnv == "development" && len(config.AppConfig.CORSAllowOrigins) > 0 {
-		r.Use(middleware.CORSMiddleware(config.AppConfig.CORSAllowOrigins))
-	}
 
 	api := r.Group("/api")
 	taskRoutes := api.Group("/tasks").Use(middleware.OpenTracingMiddleware())
@@ -65,7 +59,7 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 		userRoutes.DELETE("/:id", userController.DeleteUserHandler)
 	}
 
-	// 服務前端建置產物（web/dist），同源部署不需要 CORS/nginx
+	// 服務前端建置產物（web/dist），同源部署不需要額外 nginx
 	r.Static("/assets", "./web/dist/assets")
 	r.StaticFile("/favicon.ico", "./web/dist/favicon.ico")
 	r.NoRoute(func(c *gin.Context) {

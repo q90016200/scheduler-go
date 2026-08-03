@@ -35,8 +35,7 @@ scheduler-tool/
 │   │   └── jobs.go
 │   ├── middleware/         # 中介軟體
 │   │   ├── auth_middleware.go
-│   │   ├── tracing_middleware.go # trace_id（沿用 X-Request-ID 或自動產生）
-│   │   └── cors_middleware.go   # CORS（僅開發模式掛載）
+│   │   └── tracing_middleware.go # trace_id（沿用 X-Request-ID 或自動產生）
 │   └── router/             # 路由設定，同時負責服務 web/dist 前端靜態檔（SPA fallback）
 │       └── router.go
 ├── pkg/                    # 公用元件（工具、輔助功能等）
@@ -104,12 +103,11 @@ scheduler-tool/
 | 變數 | 說明 | 預設 |
 |---|---|---|
 | `GIN_MODE` | Gin 執行模式（`debug`/`release`） | `debug` |
-| `APP_ENV` | `development` 時才會掛載 CORS middleware（正式環境同源部署不需要） | `development` |
+| `APP_ENV` | 應用程式環境（`development`/production 等），影響預設 `LOG_LEVEL` | `development` |
 | `SERVER_PORT` | Gin 監聽埠 | - |
 | `SERVER_DOMAIN` | cookie 的 domain | - |
 | `APP_SECRET` | JWT 簽章金鑰。缺少會在啟動時 `log.Fatalf`，不會帶著空金鑰跑起來 | - |
 | `TOKEN_EXPIRY` | JWT/cookie 有效秒數 | - |
-| `CORS_ALLOW_ORIGINS` | 開發模式允許的前端來源，逗號分隔 | 空 |
 | `EXECUTION_LOG_RETENTION_DAYS` | 任務執行紀錄保留天數，超過會被每日排程清除 | `120` |
 | `SSRF_ALLOW_PRIVATE_TARGETS` | 設 `true` 時關閉任務執行的 SSRF 防護（連 loopback/metadata 位址都放行），僅供確實需要打 loopback 的情境使用 | `false` |
 | `LOG_LEVEL` | logrus 最低輸出等級（`debug`/`info`/`warn`/`error`...） | 開發環境 `debug`，其餘 `info` |
@@ -159,4 +157,4 @@ npm run dev      # 開發伺服器，透過 vite.config.ts 的 proxy 打後端 /
 npm run build    # 產出 web/dist，供 Go 後端同源服務
 ```
 
-正式部署：`cd web && npm run build` 產出 `web/dist/`，與 Go 執行檔放在同一相對路徑下啟動（`go run main.go` 或編譯後的 binary），`internal/router/router.go` 會直接服務這個資料夾並提供 SPA fallback，不需要額外的 nginx，也不需要開啟 CORS。
+正式部署：`cd web && npm run build` 產出 `web/dist/`，與 Go 執行檔放在同一相對路徑下啟動（`go run main.go` 或編譯後的 binary），`internal/router/router.go` 會直接服務這個資料夾並提供 SPA fallback，不需要額外的 nginx。開發模式下 Vite dev server 也透過 proxy 讓瀏覽器端請求保持同源，因此整個專案不需要 CORS middleware。

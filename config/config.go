@@ -3,7 +3,6 @@ package config
 import (
 	"github.com/spf13/viper"
 	"log"
-	"strings"
 	"time"
 )
 
@@ -15,7 +14,6 @@ type Config struct {
 	AppSecret                 string
 	PostgresConfig            PostgresConfig
 	TokenExpiry               time.Duration
-	CORSAllowOrigins          []string
 	ExecutionLogRetentionDays int
 	SSRFAllowPrivateTargets   bool
 }
@@ -46,15 +44,6 @@ func LoadConfig(filePath string) {
 		appEnv = "development"
 	}
 
-	var corsAllowOrigins []string
-	if raw := viper.GetString("CORS_ALLOW_ORIGINS"); raw != "" {
-		for _, origin := range strings.Split(raw, ",") {
-			if origin = strings.TrimSpace(origin); origin != "" {
-				corsAllowOrigins = append(corsAllowOrigins, origin)
-			}
-		}
-	}
-
 	executionLogRetentionDays := viper.GetInt("EXECUTION_LOG_RETENTION_DAYS")
 	if executionLogRetentionDays <= 0 {
 		executionLogRetentionDays = 120
@@ -66,7 +55,6 @@ func LoadConfig(filePath string) {
 		ServerDomain:              viper.GetString("SERVER_DOMAIN"),
 		AppSecret:                 viper.GetString("APP_SECRET"),
 		TokenExpiry:               viper.GetDuration("TOKEN_EXPIRY"),
-		CORSAllowOrigins:          corsAllowOrigins,
 		ExecutionLogRetentionDays: executionLogRetentionDays,
 		SSRFAllowPrivateTargets:   viper.GetBool("SSRF_ALLOW_PRIVATE_TARGETS"),
 		PostgresConfig: PostgresConfig{
