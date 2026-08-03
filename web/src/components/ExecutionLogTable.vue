@@ -6,6 +6,7 @@ import IconButton from './IconButton.vue'
 import type { ExecutionLog } from '../types'
 
 withDefaults(defineProps<{ logs: ExecutionLog[]; showTask?: boolean }>(), { showTask: true })
+defineEmits<{ 'sort-change': [event: { prop: string; order: 'ascending' | 'descending' | null }] }>()
 const router = useRouter()
 
 function formatTime(unixSeconds: number) {
@@ -15,13 +16,18 @@ function formatTime(unixSeconds: number) {
 </script>
 
 <template>
-  <el-table :data="logs" style="width: 100%">
+  <el-table
+    :data="logs"
+    style="width: 100%"
+    :default-sort="{ prop: 'started_at', order: 'descending' }"
+    @sort-change="$emit('sort-change', $event)"
+  >
     <el-table-column v-if="showTask" prop="task.name" label="任務名稱" />
     <el-table-column v-if="showTask" prop="task.group.name" label="群組" />
     <el-table-column label="狀態" width="100">
       <template #default="{ row }"><StatusTag :status="row.status" /></template>
     </el-table-column>
-    <el-table-column label="開始時間" width="180">
+    <el-table-column prop="started_at" label="開始時間" width="180" sortable="custom">
       <template #default="{ row }">{{ formatTime(row.started_at) }}</template>
     </el-table-column>
     <el-table-column label="結束時間" width="180">

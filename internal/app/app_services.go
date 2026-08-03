@@ -12,6 +12,7 @@ type AppServices struct {
 	TaskServices            *services.TaskService
 	AuthService             *services.AuthService
 	TaskExecutionLogService *services.TaskExecutionLogService
+	UserService             *services.UserService
 }
 
 func NewAppServices(db *gorm.DB, cronScheduler *scheduler.CronScheduler) *AppServices {
@@ -21,5 +22,6 @@ func NewAppServices(db *gorm.DB, cronScheduler *scheduler.CronScheduler) *AppSer
 		TaskServices:            services.NewTaskService(db, cronScheduler),
 		AuthService:             services.NewAuthService(db),
 		TaskExecutionLogService: services.NewTaskExecutionLogService(db),
+		UserService:             services.NewUserService(db),
 	}
 }

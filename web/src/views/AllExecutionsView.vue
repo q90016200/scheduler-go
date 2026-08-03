@@ -5,14 +5,20 @@ import ExecutionLogTable from '../components/ExecutionLogTable.vue'
 import IconButton from '../components/IconButton.vue'
 import { listExecutionLogs } from '../api/executionLogs'
 import { listTaskGroups } from '../api/taskGroups'
-import type { ExecutionLog, TaskGroup } from '../types'
+import type { ExecutionLog, ExecutionStatus, SortOrder, TaskGroup } from '../types'
 
 const logs = ref<ExecutionLog[]>([])
 const groups = ref<TaskGroup[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = 20
-const filters = reactive({ name: '', groupId: '' })
+const filters = reactive<{ name: string; groupId: string; status: ExecutionStatus | ''; sort_field: 'started_at' | ''; sort_order: SortOrder }>({
+  name: '',
+  groupId: '',
+  status: '',
+  sort_field: 'started_at',
+  sort_order: 'desc',
+})
 const loading = ref(false)
 
 async function load() {
@@ -21,6 +27,9 @@ async function load() {
     const result = await listExecutionLogs({
       task_name: filters.name || undefined,
       group_id: filters.groupId || undefined,
+      status: filters.status || undefined,
+      sort_field: filters.sort_field || undefined,
+      sort_order: filters.sort_order,
       limit: pageSize,
       offset: (page.value - 1) * pageSize,
     })
@@ -34,6 +43,12 @@ async function load() {
 function reloadFromFirstPage() {
   page.value = 1
   load()
+}
+
+function handleSortChange({ prop, order }: { prop: string; order: 'ascending' | 'descending' | null }) {
+  filters.sort_field = order ? (prop as 'started_at') : ''
+  filters.sort_order = order === 'ascending' ? 'asc' : 'desc'
+  reloadFromFirstPage()
 }
 
 onMounted(async () => {
@@ -51,9 +66,13 @@ onMounted(async () => {
       <el-select v-model="filters.groupId" placeholder="群組篩選" clearable style="width: 160px" @change="reloadFromFirstPage">
         <el-option v-for="g in groups" :key="g.id" :label="g.name" :value="g.id" />
       </el-select>
+      <el-select v-model="filters.status" placeholder="狀態篩選" clearable style="width: 140px" @change="reloadFromFirstPage">
+        <el-option label="成功" value="success" />
+        <el-option label="失敗" value="failed" />
+      </el-select>
       <IconButton :icon="Refresh" label="重新整理" :loading="loading" @click="load" />
     </div>
-    <ExecutionLogTable :logs="logs" />
+    <ExecutionLogTable :logs="logs" @sort-change="handleSortChange" />
     <el-pagination
       v-model:current-page="page"
       :page-size="pageSize"

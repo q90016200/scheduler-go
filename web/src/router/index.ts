@@ -26,6 +26,7 @@ const routes = [
     component: () => import('../views/TaskGroupFormView.vue'),
     props: true,
   },
+  { path: '/users', name: 'users', component: () => import('../views/UserListView.vue') },
   { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('../views/NotFoundView.vue'), meta: { public: true } },
 ]
 

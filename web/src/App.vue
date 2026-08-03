@@ -1,14 +1,8 @@
 <script setup lang="ts">
-import { Folder, Histogram, List, SwitchButton } from '@element-plus/icons-vue'
-import IconButton from './components/IconButton.vue'
+import { Folder, Histogram, List } from '@element-plus/icons-vue'
 import { useAuthStore } from './stores/auth'
 
 const auth = useAuthStore()
-
-async function handleLogout() {
-  await auth.logout()
-  location.href = '/login'
-}
 </script>
 
 <template>
@@ -21,7 +15,6 @@ async function handleLogout() {
       </el-menu>
       <div class="app-user">
         <span>{{ auth.user?.user_name }}</span>
-        <IconButton :icon="SwitchButton" label="登出" @click="handleLogout" />
       </div>
     </el-header>
     <el-main>

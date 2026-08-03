@@ -16,6 +16,7 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 	taskController := controllers.NewTaskController(services)
 	authController := controllers.NewAuthController(services)
 	execLogController := controllers.NewTaskExecutionLogController(services)
+	userController := controllers.NewUserController(services)
 
 	// 開發模式下前端走 Vite dev server（不同 origin），需要 CORS；正式環境同源部署不需要
 	if config.AppConfig.AppEnv == "development" && len(config.AppConfig.CORSAllowOrigins) > 0 {
@@ -50,6 +51,17 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 		authRoutes.POST("/login", authController.LoginHandler)
 		authRoutes.POST("/logout", authController.LogoutHandler)
 		authRoutes.GET("/me", authController.MeHandler)
+	}
+
+	// 使用者管理路由
+	userRoutes := api.Group("/users").Use(middleware.OpenTracingMiddleware())
+	{
+		userRoutes.GET("/", userController.ListUsersHandler)
+		userRoutes.GET("/:id", userController.GetUserHandler)
+		userRoutes.POST("/", userController.CreateUserHandler)
+		userRoutes.PUT("/:id", userController.UpdateUserHandler)
+		userRoutes.PATCH("/:id/status", userController.UpdateUserStatusHandler)
+		userRoutes.DELETE("/:id", userController.DeleteUserHandler)
 	}
 
 	// 服務前端建置產物（web/dist），同源部署不需要 CORS/nginx

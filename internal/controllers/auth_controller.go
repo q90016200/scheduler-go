@@ -6,6 +6,7 @@ import (
 	"github.com/q90016200/scheduler-go/config"
 	"github.com/q90016200/scheduler-go/internal/app"
 	"github.com/q90016200/scheduler-go/internal/auth"
+	"github.com/q90016200/scheduler-go/internal/services"
 	"github.com/q90016200/scheduler-go/pkg/response"
 	"gorm.io/gorm"
 	"net/http"
@@ -55,6 +56,10 @@ func (ctrl *AuthController) LoginHandler(c *gin.Context) {
 
 	user, err := ctrl.services.AuthService.Authenticate(input.UserName, input.Password)
 	if err != nil {
+		if errors.Is(err, services.ErrUserDisabled) {
+			response.Fail(c, http.StatusUnauthorized, "帳號已停用", nil)
+			return
+		}
 		response.Fail(c, http.StatusUnauthorized, "使用者名稱或密碼錯誤", err)
 		return
 	}

@@ -13,12 +13,20 @@ func NewTaskExecutionLogService(db *gorm.DB) *TaskExecutionLogService {
 	return &TaskExecutionLogService{db: db}
 }
 
-// ListLogs 依 task_id/task_name/group_id 篩選（可留空查全部），依建立時間新到舊排序，limit/offset 分頁
-func (s *TaskExecutionLogService) ListLogs(taskID, taskName, groupID string, limit, offset int) ([]models.TaskExecutionLog, int64, error) {
+// listExecutionLogsSortableFields 排序欄位白名單，理由同 task_service.go 的 listTasksSortableFields
+var listExecutionLogsSortableFields = map[string]bool{
+	"started_at": true,
+}
+
+// ListLogs 依 task_id/task_name/group_id/status 篩選（可留空查全部），預設依開始時間新到舊排序，limit/offset 分頁
+func (s *TaskExecutionLogService) ListLogs(taskID, taskName, groupID, status, sortField, sortOrder string, limit, offset int) ([]models.TaskExecutionLog, int64, error) {
 	var logs []models.TaskExecutionLog
 	query := s.db.Model(&models.TaskExecutionLog{})
 	if taskID != "" {
 		query = query.Where("task_execution_logs.task_id = ?", taskID)
+	}
+	if status != "" {
+		query = query.Where("task_execution_logs.status = ?", status)
 	}
 	if taskName != "" || groupID != "" {
 		query = query.Joins("JOIN tasks ON tasks.id = task_execution_logs.task_id")
@@ -35,7 +43,16 @@ func (s *TaskExecutionLogService) ListLogs(taskID, taskName, groupID string, lim
 		return nil, 0, err
 	}
 
-	err := query.Preload("Task.Group").Order("created_at DESC").Limit(limit).Offset(offset).Find(&logs).Error
+	order := "started_at DESC"
+	if listExecutionLogsSortableFields[sortField] {
+		dir := "ASC"
+		if sortOrder == "desc" {
+			dir = "DESC"
+		}
+		order = sortField + " " + dir
+	}
+
+	err := query.Preload("Task.Group").Order(order).Limit(limit).Offset(offset).Find(&logs).Error
 	return logs, total, err
 }
 

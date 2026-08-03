@@ -24,6 +24,9 @@ func (ctrl *TaskExecutionLogController) ListLogsHandler(c *gin.Context) {
 	taskID := c.Query("task_id")
 	taskName := c.Query("task_name")
 	groupID := c.Query("group_id")
+	status := c.Query("status")
+	sortField := c.Query("sort_field")
+	sortOrder := c.Query("sort_order")
 
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	if limit <= 0 || limit > 100 {
@@ -34,7 +37,7 @@ func (ctrl *TaskExecutionLogController) ListLogsHandler(c *gin.Context) {
 		offset = 0
 	}
 
-	logs, total, err := ctrl.services.TaskExecutionLogService.ListLogs(taskID, taskName, groupID, limit, offset)
+	logs, total, err := ctrl.services.TaskExecutionLogService.ListLogs(taskID, taskName, groupID, status, sortField, sortOrder, limit, offset)
 	if err != nil {
 		logger.WithTrace(c).Error(err.Error())
 		response.Fail(c, http.StatusInternalServerError, "取得執行紀錄失敗", nil)
