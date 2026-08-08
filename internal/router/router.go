@@ -37,6 +37,7 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 
 		taskRoutes.GET("/logs/", execLogController.ListLogsHandler)
 		taskRoutes.GET("/logs/:id", execLogController.GetLogHandler)
+		taskRoutes.GET("/:id/stats", execLogController.GetTaskStatsHandler)
 	}
 
 	// 用戶驗證路由

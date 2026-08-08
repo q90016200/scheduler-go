@@ -68,6 +68,21 @@ func (cs *CronScheduler) jobCount() int {
 	return len(cs.taskCronEntryIDs)
 }
 
+// NextRunAt 回傳任務下次執行時間；任務未掛上 cron job（未啟用、或註冊失敗）時 ok 為 false
+func NextRunAt(cs *CronScheduler, taskID string) (time.Time, bool) {
+	cs.mu.Lock()
+	entryID, exists := cs.taskCronEntryIDs[taskID]
+	cs.mu.Unlock()
+	if !exists {
+		return time.Time{}, false
+	}
+	next := cs.Cron.Entry(entryID).Next
+	if next.IsZero() {
+		return time.Time{}, false
+	}
+	return next, true
+}
+
 // StartScheduler 啟動排程器並註冊所有任務
 func (cs *CronScheduler) StartScheduler() {
 	// 建立每分鐘檢查任務狀態任務

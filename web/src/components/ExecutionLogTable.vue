@@ -27,6 +27,12 @@ function formatTime(unixSeconds: number) {
     <el-table-column label="狀態" width="100">
       <template #default="{ row }"><StatusTag :status="row.status" /></template>
     </el-table-column>
+    <el-table-column label="來源" width="90">
+      <template #default="{ row }">{{ row.source === 'manual' ? '手動' : '排程' }}</template>
+    </el-table-column>
+    <el-table-column label="嘗試次數" width="90">
+      <template #default="{ row }">第 {{ row.attempt_number }} 次{{ row.is_final_attempt ? '' : '（重試中）' }}</template>
+    </el-table-column>
     <el-table-column prop="started_at" label="開始時間" width="180" sortable="custom">
       <template #default="{ row }">{{ formatTime(row.started_at) }}</template>
     </el-table-column>

@@ -5,21 +5,23 @@ import { Back, Document, VideoPlay } from '@element-plus/icons-vue'
 import StatusTag from '../components/StatusTag.vue'
 import IconButton from '../components/IconButton.vue'
 import RunTaskDialog from '../components/RunTaskDialog.vue'
-import { getTask } from '../api/tasks'
-import type { Task } from '../types'
+import { getTask, getTaskStats } from '../api/tasks'
+import type { Task, TaskStats } from '../types'
 
 const props = defineProps<{ id: string }>()
 const router = useRouter()
 const task = ref<Task>()
+const stats = ref<TaskStats>()
 const runDialogVisible = ref(false)
 
-function formatTime(unixSeconds: number) {
+function formatTime(unixSeconds?: number | null) {
   if (!unixSeconds) return '-'
   return new Date(unixSeconds * 1000).toLocaleString()
 }
 
 async function load() {
   task.value = await getTask(props.id)
+  stats.value = await getTaskStats(props.id)
 }
 
 onMounted(load)
@@ -39,6 +41,7 @@ onMounted(load)
       <el-descriptions-item label="群組">{{ task.group?.name ?? '-' }}</el-descriptions-item>
       <el-descriptions-item label="類型">{{ task.type }}</el-descriptions-item>
       <el-descriptions-item label="排程 (cron)">{{ task.schedule }}</el-descriptions-item>
+      <el-descriptions-item label="下次執行時間">{{ formatTime(task.next_run_at) }}</el-descriptions-item>
       <el-descriptions-item label="Method">{{ task.method }}</el-descriptions-item>
       <el-descriptions-item label="Endpoint" :span="2">{{ task.endpoint }}</el-descriptions-item>
       <el-descriptions-item label="描述" :span="2">{{ task.description || '-' }}</el-descriptions-item>
@@ -49,6 +52,12 @@ onMounted(load)
       <el-descriptions-item label="更新者">{{ task.updated_by || '-' }}</el-descriptions-item>
       <el-descriptions-item label="建立時間">{{ formatTime(task.created_at) }}</el-descriptions-item>
       <el-descriptions-item label="更新時間">{{ formatTime(task.updated_at) }}</el-descriptions-item>
+    </el-descriptions>
+
+    <el-descriptions v-if="stats" title="執行儀表板（近 30 天）" :column="3" border style="margin-top: 16px">
+      <el-descriptions-item label="成功率">{{ stats.success_rate_30d.toFixed(1) }}%</el-descriptions-item>
+      <el-descriptions-item label="平均耗時">{{ Math.round(stats.avg_duration_ms_30d) }} ms</el-descriptions-item>
+      <el-descriptions-item label="近期失敗次數">{{ stats.recent_fail_count }} / 10</el-descriptions-item>
     </el-descriptions>
 
     <RunTaskDialog v-if="runDialogVisible" v-model:visible="runDialogVisible" :task="task" />

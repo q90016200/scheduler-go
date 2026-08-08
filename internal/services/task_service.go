@@ -69,31 +69,65 @@ func (s *TaskService) ListTasks(status, groupID, name, sortField, sortOrder stri
 
 	// 查詢結果
 	err := query.Preload("Group").Limit(limit).Offset(offset).Find(&tasks).Error
+	if err != nil {
+		return nil, 0, err
+	}
+	for i := range tasks {
+		decorateNextRunAt(s.cronScheduler, &tasks[i])
+	}
 	return tasks, total, err
 }
 
 // GetTask 取得單一任務
 func (s *TaskService) GetTask(id string) (*models.Task, error) {
 	var task models.Task
-	err := s.db.Preload("Group").First(&task, "id = ?", id).Error
-	return &task, err
+	if err := s.db.Preload("Group").First(&task, "id = ?", id).Error; err != nil {
+		return nil, err
+	}
+	decorateNextRunAt(s.cronScheduler, &task)
+	return &task, nil
+}
+
+// decorateNextRunAt 從記憶體中的 cron entry 查下次執行時間裝飾進 Task；
+// 未掛上 cron job（未啟用、或註冊失敗）的任務保持 nil，前端顯示「-」
+func decorateNextRunAt(cs *scheduler.CronScheduler, task *models.Task) {
+	next, ok := scheduler.NextRunAt(cs, task.ID)
+	if !ok {
+		return
+	}
+	unix := next.Unix()
+	task.NextRunAt = &unix
 }
 
 func (s *TaskService) CreateTask(input models.CreateTaskReq) (*models.Task, error) {
 	guid := xid.New()
 	task := &models.Task{
-		ID:          guid.String(),
-		GroupID:     input.GroupID,
-		Name:        input.Name,
-		Description: input.Description,
-		Schedule:    input.Schedule,
-		Type:        input.Type,
-		Endpoint:    input.EndPoint,
-		Method:      input.Method,
-		Payload:     input.Payload,
-		Status:      input.Status,
-		CreatedBy:   input.UserId,
-		UpdatedBy:   input.UserId,
+		ID:                  guid.String(),
+		GroupID:             input.GroupID,
+		Name:                input.Name,
+		Description:         input.Description,
+		Schedule:            input.Schedule,
+		Type:                input.Type,
+		Endpoint:            input.EndPoint,
+		Method:              input.Method,
+		Payload:             input.Payload,
+		Status:              input.Status,
+		CreatedBy:           input.UserId,
+		UpdatedBy:           input.UserId,
+		RetryCount:          input.RetryCount,
+		RetryDelayMs:        input.RetryDelayMs,
+		TimeoutSeconds:      input.TimeoutSeconds,
+		Headers:             input.Headers,
+		NotifyFailThreshold: input.NotifyFailThreshold,
+		NotifyTelegram:      input.NotifyTelegram,
+		NotifySlack:         input.NotifySlack,
+		NotifyEmail:         input.NotifyEmail,
+	}
+	if task.TimeoutSeconds == 0 {
+		task.TimeoutSeconds = 10
+	}
+	if task.Headers == "" {
+		task.Headers = "{}"
 	}
 
 	if err := s.db.Create(task).Error; err != nil {
@@ -115,21 +149,39 @@ func (s *TaskService) CreateTask(input models.CreateTaskReq) (*models.Task, erro
 }
 
 // taskUpdatableColumns UpdateTask 允許更新的欄位，排除 created_at/created_by
-var taskUpdatableColumns = []string{"group_id", "name", "description", "schedule", "type", "endpoint", "method", "payload", "status", "updated_by"}
+var taskUpdatableColumns = []string{
+	"group_id", "name", "description", "schedule", "type", "endpoint", "method", "payload", "status", "updated_by",
+	"retry_count", "retry_delay_ms", "timeout_seconds", "headers",
+	"notify_fail_threshold", "notify_telegram", "notify_slack", "notify_email",
+}
 
 func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models.Task, error) {
 	task := &models.Task{
-		ID:          id,
-		GroupID:     input.GroupID,
-		Name:        input.Name,
-		Description: input.Description,
-		Schedule:    input.Schedule,
-		Type:        input.Type,
-		Endpoint:    input.EndPoint,
-		Method:      input.Method,
-		Payload:     input.Payload,
-		Status:      input.Status,
-		UpdatedBy:   input.UserId,
+		ID:                  id,
+		GroupID:             input.GroupID,
+		Name:                input.Name,
+		Description:         input.Description,
+		Schedule:            input.Schedule,
+		Type:                input.Type,
+		Endpoint:            input.EndPoint,
+		Method:              input.Method,
+		Payload:             input.Payload,
+		Status:              input.Status,
+		UpdatedBy:           input.UserId,
+		RetryCount:          input.RetryCount,
+		RetryDelayMs:        input.RetryDelayMs,
+		TimeoutSeconds:      input.TimeoutSeconds,
+		Headers:             input.Headers,
+		NotifyFailThreshold: input.NotifyFailThreshold,
+		NotifyTelegram:      input.NotifyTelegram,
+		NotifySlack:         input.NotifySlack,
+		NotifyEmail:         input.NotifyEmail,
+	}
+	if task.TimeoutSeconds == 0 {
+		task.TimeoutSeconds = 10
+	}
+	if task.Headers == "" {
+		task.Headers = "{}"
 	}
 
 	result := s.db.Model(&models.Task{}).Where("id = ?", id).Select(taskUpdatableColumns).Updates(task)

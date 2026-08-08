@@ -45,6 +45,16 @@ export interface Task {
   created_at: number
   updated_at: number
   group?: TaskGroup | null
+  retry_count: number
+  retry_delay_ms: number
+  timeout_seconds: number
+  headers: string
+  notify_fail_threshold: number
+  notify_telegram: boolean
+  notify_slack: boolean
+  notify_email: boolean
+  consecutive_failures: number
+  next_run_at?: number | null
 }
 
 export type TaskWriteDTO = {
@@ -58,6 +68,20 @@ export type TaskWriteDTO = {
   payload: string
   status?: Status
   user_id: string
+  retry_count: number
+  retry_delay_ms: number
+  timeout_seconds: number
+  headers: string
+  notify_fail_threshold: number
+  notify_telegram: boolean
+  notify_slack: boolean
+  notify_email: boolean
+}
+
+export interface TaskStats {
+  success_rate_30d: number
+  avg_duration_ms_30d: number
+  recent_fail_count: number
 }
 
 export type TaskGroupWriteDTO = {
@@ -66,6 +90,8 @@ export type TaskGroupWriteDTO = {
   status?: Status
   user_id: string
 }
+
+export type ExecutionSource = 'cron' | 'manual'
 
 export interface ExecutionLog {
   id: string
@@ -77,6 +103,9 @@ export interface ExecutionLog {
   error_message?: string
   created_at: number
   task?: Task
+  source: ExecutionSource
+  attempt_number: number
+  is_final_attempt: boolean
 }
 
 export interface ListLogsResult {

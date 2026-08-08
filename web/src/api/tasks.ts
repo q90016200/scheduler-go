@@ -1,5 +1,5 @@
 import http from './client'
-import type { ListTasksResult, RunTaskParams, RunTaskResult, SortField, SortOrder, Status, Task, TaskWriteDTO } from '../types'
+import type { ListTasksResult, RunTaskParams, RunTaskResult, SortField, SortOrder, Status, Task, TaskStats, TaskWriteDTO } from '../types'
 
 export const listTasks = (params?: {
   status?: string
@@ -25,3 +25,5 @@ export const deleteTask = (id: string) => http.delete<unknown, void>(`/tasks/${i
 export const runTask = (id: string, params: RunTaskParams) => http.post<unknown, RunTaskResult>(`/tasks/${id}/run`, params)
 
 export const cancelRunTask = (id: string) => http.delete<unknown, void>(`/tasks/${id}/run`)
+
+export const getTaskStats = (id: string) => http.get<unknown, TaskStats>(`/tasks/${id}/stats`)

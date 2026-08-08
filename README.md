@@ -112,6 +112,9 @@ scheduler-tool/
 | `SSRF_ALLOW_PRIVATE_TARGETS` | 設 `true` 時關閉任務執行的 SSRF 防護（連 loopback/metadata 位址都放行），僅供確實需要打 loopback 的情境使用 | `false` |
 | `LOG_LEVEL` | logrus 最低輸出等級（`debug`/`info`/`warn`/`error`...） | 開發環境 `debug`，其餘 `info` |
 | `POSTGRES_*` | PostgreSQL 連線資訊。任一項缺少同樣會在啟動時 `log.Fatalf` | - |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 失敗通知的 Telegram 管道；任一項留空視為停用 | - |
+| `SLACK_WEBHOOK_URL` | 失敗通知的 Slack 管道（Incoming Webhook URL）；留空視為停用 | - |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` / `SMTP_TO` | 失敗通知的 Email 管道；`SMTP_HOST`/`SMTP_FROM`/`SMTP_TO` 任一項留空視為停用 | - |
 
 ## API 端點
 
@@ -125,16 +128,27 @@ scheduler-tool/
 - 密碼一律以 bcrypt 雜湊儲存；`status` 沿用 Task/TaskGroup 共用的 `enabled`/`disabled` 慣例。
 
 **Task**（`/api/tasks`）：
-- `GET /`（清單，可用 `status`/`group_id`/`name`（模糊比對）/`sort_field`/`sort_order`/`limit`/`offset` 查詢參數）
+- `GET /`（清單，可用 `status`/`group_id`/`name`（模糊比對）/`sort_field`/`sort_order`/`limit`/`offset` 查詢參數）；每筆任務會多帶 `next_run_at`（unix 秒，只有已啟用且成功掛上 cron job 的任務才有值，其餘為 `null`）
 - `GET /:id`、`POST /`、`PUT /:id`（整包更新，`name`/`schedule`/`type`/`endpoint` 皆為必填）、`DELETE /:id`
 - `PATCH /:id/status`（body 僅需 `{"status": "enabled"|"disabled", "user_id": "..."}`，只切換啟用狀態，不需送整包任務資料）
-- `POST /:id/run`（立即執行，不受排程狀態影響；非同步觸發，呼叫後立刻回傳）。body 可選帶 `{"repeat": 1-50, "interval_ms": 100-60000}` 指定重複執行次數與每次呼叫的間隔毫秒數，省略時預設執行 1 次；同一任務同時只允許一個進行中的重複批次，重複觸發會回 409。中途某次執行失敗不會中斷剩下的次數，每次執行都各自寫入一筆執行紀錄。
+- `POST /:id/run`（立即執行，不受排程狀態影響；非同步觸發，呼叫後立刻回傳）。body 可選帶 `{"repeat": 1-50, "interval_ms": 100-60000}` 指定重複執行次數與每次呼叫的間隔毫秒數，省略時預設執行 1 次；同一任務同時只允許一個進行中的重複批次，重複觸發會回 409。中途某次執行失敗不會中斷剩下的次數，每次執行都各自寫入一筆執行紀錄。立即執行（手動觸發）不套用失敗通知門檻計數，避免測試時誤觸發通知。
 - `DELETE /:id/run`（取消該任務目前進行中的重複批次，只會阻止尚未發出的下一次執行，已送出的那一發仍會跑完；找不到進行中的批次回 404）
+- `GET /:id/stats`（執行儀表板小面板：近 30 天成功率 `success_rate_30d`、近 30 天平均耗時 `avg_duration_ms_30d`（毫秒）、最近 10 次中失敗次數 `recent_fail_count`；只採計排程自動觸發、且是該次觸發最終結果的紀錄，即時 SQL 聚合，不做快取）
 - 建立/更新時 `type` 限定 `http`/`rpc`、`schedule` 必須是合法的標準 cron 表達式，兩者驗證失敗會在寫入資料庫前被擋下（回 400），不會留下無法排程的孤兒資料。
+- 任務新增以下欄位（皆選填，有預設值）：
+  - `retry_count`（0-5，失敗時額外重試次數）、`retry_delay_ms`（0-30000，每次重試間隔毫秒，固定值不做指數退避）
+  - `timeout_seconds`（1-120，單次 HTTP/RPC 呼叫逾時秒數，預設 10）
+  - `headers`（自由 JSON 字串，如 `{"Authorization":"Bearer xxx"}`；http 任務轉成 request headers、rpc 任務轉成 gRPC metadata；明文儲存，跟 `payload`/`endpoint` 同信任模型）
+  - `notify_fail_threshold`（1-20，連續失敗達此次數才發一次失敗通知，之後靜音直到成功一次重新累積；0 表示不啟用通知）
+  - `notify_telegram`/`notify_slack`/`notify_email`（布林，個別勾選要不要收該管道的通知；管道本身要在 `.env` 設定好才會真的送出）
 
 **TaskGroup**（`/api/tasks/group`）：`GET /`（可用 `status`/`name`/`sort_field`/`sort_order`/`limit`/`offset`）、`GET /:id`、`POST /`、`PUT /:id`、`DELETE /:id`。將群組 `PUT` 成 `disabled`，或直接 `DELETE` 群組，都會連動把該群組底下仍為 `enabled` 的任務改成 `disabled` 並取消排程（`DELETE` 的回應會帶 `deactivated_tasks: [{id, name}]`，供前端提示使用者哪些任務被停用了）；改回 `enabled` 不會自動恢復子任務，需個別開啟。刪除群組不會刪除底下的任務，只會解除關聯（任務的 `group_id` 變成 `null`）——前端刪除前的確認對話框會列出底下所有任務（含已停用）的總數與名稱，避免使用者不知道這件事。
 
-**執行紀錄**（`/api/tasks/logs`）：`GET /`（可用 `task_id`/`task_name`/`group_id` 篩選，`limit`/`offset` 分頁，回傳每筆會帶 `task.name`/`task.group.name`）、`GET /:id`（同樣帶 `task` 資訊）。刪除任務會連動刪除其執行紀錄（外鍵 `ON DELETE CASCADE`）。
+**執行紀錄**（`/api/tasks/logs`）：`GET /`（可用 `task_id`/`task_name`/`group_id` 篩選，`limit`/`offset` 分頁，回傳每筆會帶 `task.name`/`task.group.name`）、`GET /:id`（同樣帶 `task` 資訊）。刪除任務會連動刪除其執行紀錄（外鍵 `ON DELETE CASCADE`）。每筆紀錄多帶：
+- `source`（`cron`/`manual`，區分是排程自動觸發還是立即執行手動觸發）
+- `attempt_number`（第幾次嘗試，第一次是 1）、`is_final_attempt`（是否為這次觸發（含所有重試）的最後一筆；設有 `retry_count` 的任務失敗重試時，每次嘗試各存一筆，只有最後一筆會是 `true`）
+
+**失敗重試與通知**：任務失敗（網路錯誤/逾時/HTTP 5xx）時依 `retry_count`/`retry_delay_ms` 重試；HTTP 4xx 與參數格式錯誤（例如 method/payload 格式不對）視為不可重試，直接判定為這次觸發的最終結果。只有排程自動觸發（`source=cron`）的最終結果才會累加/清零任務的連續失敗次數：失敗 +1、成功清零；連續失敗次數剛好等於 `notify_fail_threshold` 的那一刻，依任務勾選的管道（Telegram/Slack/Email）非同步發送一次通知，之後即使繼續失敗也靜音，直到成功一次重新累積才會再通知一次。通知發送失敗只記 log，不重試、不影響任務執行本身。
 
 ## 安全性
 

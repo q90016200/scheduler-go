@@ -68,3 +68,21 @@ func (ctrl *TaskExecutionLogController) GetLogHandler(c *gin.Context) {
 
 	response.Success(c, execLog, "成功獲取執行紀錄")
 }
+
+// GetTaskStatsHandler 取得單一任務的執行儀表板小面板（近 30 天成功率/平均耗時、近期失敗次數）
+func (ctrl *TaskExecutionLogController) GetTaskStatsHandler(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		response.Fail(c, http.StatusBadRequest, "id is empty", nil)
+		return
+	}
+
+	stats, err := ctrl.services.TaskExecutionLogService.GetTaskStats(id)
+	if err != nil {
+		logger.WithTrace(c).Error(err.Error())
+		response.Fail(c, http.StatusInternalServerError, "取得任務統計失敗", nil)
+		return
+	}
+
+	response.Success(c, stats, "成功獲取任務統計")
+}

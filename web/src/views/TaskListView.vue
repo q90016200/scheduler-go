@@ -35,6 +35,11 @@ const filters = reactive<{ name: string; groupId: string; status: string; sort_f
   sort_order: 'asc',
 })
 
+function formatTime(unixSeconds?: number | null) {
+  if (!unixSeconds) return '-'
+  return new Date(unixSeconds * 1000).toLocaleString()
+}
+
 async function load() {
   loading.value = true
   try {
@@ -146,6 +151,9 @@ async function handleSubmit(payload: TaskWriteDTO) {
       <el-table-column prop="group.name" label="群組" />
       <el-table-column prop="type" label="類型" width="80" />
       <el-table-column prop="schedule" label="排程" sortable="custom" />
+      <el-table-column label="下次執行" width="180">
+        <template #default="{ row }">{{ formatTime(row.next_run_at) }}</template>
+      </el-table-column>
       <el-table-column label="狀態" prop="status" width="140" sortable="custom">
         <template #default="{ row }">
           <el-switch
