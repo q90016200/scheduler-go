@@ -2,19 +2,21 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Edit, Plus, Refresh } from '@element-plus/icons-vue'
-import StatusTag from '../components/StatusTag.vue'
+import { Delete, Edit, Plus, Refresh, View } from '@element-plus/icons-vue'
 import IconButton from '../components/IconButton.vue'
-import { deleteTaskGroup, listTaskGroups } from '../api/taskGroups'
+import { deleteTaskGroup, listTaskGroups, updateTaskGroup } from '../api/taskGroups'
 import { listTasks } from '../api/tasks'
-import type { SortOrder, TaskGroup } from '../types'
+import { useAuthStore } from '../stores/auth'
+import type { SortOrder, Status, TaskGroup } from '../types'
 
 const router = useRouter()
+const auth = useAuthStore()
 const groups = ref<TaskGroup[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = 20
 const loading = ref(false)
+const statusUpdatingIds = ref(new Set<string>())
 const filters = reactive<{ name: string; status: string; sort_field: 'name' | 'created_at' | 'status' | ''; sort_order: SortOrder }>({
   name: '',
   status: '',
@@ -52,6 +54,35 @@ function handleSortChange({ prop, order }: { prop: string; order: 'ascending' | 
 }
 
 onMounted(load)
+
+async function handleStatusChange(group: TaskGroup, status: Status) {
+  if (status === 'disabled') {
+    const enabled = await listTasks({ group_id: group.id, status: 'enabled', limit: 1 })
+    if (enabled.total > 0) {
+      try {
+        await ElMessageBox.confirm(
+          `將停用群組「${group.name}」下 ${enabled.total} 個啟用中任務，確定停用？`,
+          '停用群組',
+          { type: 'warning' },
+        )
+      } catch (err) {
+        if (err === 'cancel' || err === 'close') return
+        throw err
+      }
+    }
+  }
+
+  statusUpdatingIds.value.add(group.id)
+  try {
+    await updateTaskGroup(group.id, { name: group.name, description: group.description, status, user_id: auth.user?.id ?? '' })
+    ElMessage.success('狀態已更新')
+    await load()
+  } catch (err) {
+    ElMessage.error((err as Error).message || '狀態更新失敗')
+  } finally {
+    statusUpdatingIds.value.delete(group.id)
+  }
+}
 
 async function handleDelete(group: TaskGroup) {
   try {
@@ -95,12 +126,23 @@ async function handleDelete(group: TaskGroup) {
     <el-table :data="groups" style="width: 100%" @sort-change="handleSortChange">
       <el-table-column prop="name" label="名稱" sortable="custom" />
       <el-table-column prop="description" label="描述" />
-      <el-table-column label="狀態" prop="status" width="100" sortable="custom">
-        <template #default="{ row }"><StatusTag :status="row.status" /></template>
+      <el-table-column label="狀態" prop="status" width="140" sortable="custom">
+        <template #default="{ row }">
+          <el-switch
+            :model-value="row.status"
+            active-value="enabled"
+            inactive-value="disabled"
+            active-text="啟用"
+            inactive-text="停用"
+            :loading="statusUpdatingIds.has(row.id)"
+            @change="(val: Status) => handleStatusChange(row, val)"
+          />
+        </template>
       </el-table-column>
-      <el-table-column label="操作" width="100">
+      <el-table-column label="操作" width="140">
         <template #default="{ row }">
           <el-button-group>
+            <IconButton :icon="View" label="查看任務" @click="router.push(`/tasks?group_id=${row.id}`)" />
             <IconButton :icon="Edit" label="編輯" @click="router.push(`/groups/${row.id}/edit`)" />
             <IconButton :icon="Delete" label="刪除" type="danger" @click="handleDelete(row)" />
           </el-button-group>

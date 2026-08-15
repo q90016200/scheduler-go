@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Document, Edit, Plus, Refresh, View, VideoPlay } from '@element-plus/icons-vue'
 import TaskForm from '../components/TaskForm.vue'
@@ -13,6 +13,7 @@ import { useAutoRefresh } from '../composables/useAutoRefresh'
 import type { Status, SortField, SortOrder, Task, TaskGroup, TaskWriteDTO } from '../types'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const tasks = ref<Task[]>([])
 const groups = ref<TaskGroup[]>([])
@@ -76,6 +77,8 @@ function handleSortChange({ prop, order }: { prop: string; order: 'ascending' | 
 onMounted(async () => {
   // ponytail: 下拉選單需要「全部群組」，用大 limit 取代真正的全量 API；群組數量大到 1000 筆時再改成搜尋式下拉
   groups.value = (await listTaskGroups({ limit: 1000 })).groups
+  const groupId = route.query.group_id
+  if (typeof groupId === 'string' && groupId) filters.groupId = groupId
   await load()
 })
 
