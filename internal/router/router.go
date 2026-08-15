@@ -16,9 +16,11 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 	authController := controllers.NewAuthController(services)
 	execLogController := controllers.NewTaskExecutionLogController(services)
 	userController := controllers.NewUserController(services)
+	notifyController := controllers.NewNotifyController()
+	tracing := middleware.OpenTracingMiddleware()
 
 	api := r.Group("/api")
-	taskRoutes := api.Group("/tasks").Use(middleware.OpenTracingMiddleware())
+	taskRoutes := api.Group("/tasks").Use(tracing)
 	{
 		taskRoutes.GET("/", taskController.ListTasksHandler)
 		taskRoutes.GET("/:id", taskController.GetTaskHandler)
@@ -41,7 +43,7 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 	}
 
 	// 用戶驗證路由
-	authRoutes := api.Group("/auth").Use(middleware.OpenTracingMiddleware())
+	authRoutes := api.Group("/auth").Use(tracing)
 	{
 		authRoutes.POST("/register", authController.RegisterHandler)
 		authRoutes.POST("/login", authController.LoginHandler)
@@ -49,8 +51,18 @@ func SetupRouter(r *gin.Engine, services *app.AppServices) *gin.Engine {
 		authRoutes.GET("/me", authController.MeHandler)
 	}
 
+	dashboardRoutes := api.Group("/dashboard").Use(tracing)
+	{
+		dashboardRoutes.GET("/stats", execLogController.GetDashboardStatsHandler)
+	}
+
+	notifyRoutes := api.Group("/notify").Use(tracing)
+	{
+		notifyRoutes.GET("/config", notifyController.GetNotifyConfigHandler)
+	}
+
 	// 使用者管理路由
-	userRoutes := api.Group("/users").Use(middleware.OpenTracingMiddleware())
+	userRoutes := api.Group("/users").Use(tracing)
 	{
 		userRoutes.GET("/", userController.ListUsersHandler)
 		userRoutes.GET("/:id", userController.GetUserHandler)

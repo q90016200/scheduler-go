@@ -161,3 +161,29 @@ export interface ListUsersResult {
   limit: number
   offset: number
 }
+
+export interface DashboardFailingTask {
+  task_id: string
+  task_name: string
+  fail_count: number
+}
+
+export interface DashboardTaskRef {
+  task_id: string
+  task_name: string
+}
+
+export interface DashboardStats {
+  total_tasks_enabled: number
+  total_tasks_disabled: number
+  executions_24h: number
+  success_rate_24h: number
+  top_failing_tasks_24h: DashboardFailingTask[]
+  currently_failing: DashboardTaskRef[]
+}
+
+export interface NotifyConfig {
+  telegram_configured: boolean
+  slack_configured: boolean
+  email_configured: boolean
+}

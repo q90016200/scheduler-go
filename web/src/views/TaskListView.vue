@@ -9,6 +9,7 @@ import RunTaskDialog from '../components/RunTaskDialog.vue'
 import { createTask, deleteTask, listTasks, updateTask, updateTaskStatus } from '../api/tasks'
 import { listTaskGroups } from '../api/taskGroups'
 import { useAuthStore } from '../stores/auth'
+import { useAutoRefresh } from '../composables/useAutoRefresh'
 import type { Status, SortField, SortOrder, Task, TaskGroup, TaskWriteDTO } from '../types'
 
 const router = useRouter()
@@ -40,8 +41,8 @@ function formatTime(unixSeconds?: number | null) {
   return new Date(unixSeconds * 1000).toLocaleString()
 }
 
-async function load() {
-  loading.value = true
+async function load(silent = false) {
+  if (!silent) loading.value = true
   try {
     const result = await listTasks({
       status: filters.status || undefined,
@@ -55,9 +56,11 @@ async function load() {
     tasks.value = result.tasks
     total.value = result.total
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
+
+useAutoRefresh(() => load(true), 120000)
 
 function reloadFromFirstPage() {
   page.value = 1
@@ -143,7 +146,7 @@ async function handleSubmit(payload: TaskWriteDTO) {
         <el-option label="停用" value="disabled" />
       </el-select>
       <IconButton :icon="Plus" label="新增任務" type="primary" @click="openCreate" />
-      <IconButton :icon="Refresh" label="重新整理" :loading="loading" @click="load" />
+      <IconButton :icon="Refresh" label="重新整理" :loading="loading" @click="() => load()" />
     </div>
 
     <el-table :data="tasks" style="width: 100%" @sort-change="handleSortChange">
@@ -186,7 +189,7 @@ async function handleSubmit(payload: TaskWriteDTO) {
       :total="total"
       layout="prev, pager, next"
       style="margin-top: 16px"
-      @current-change="load"
+      @current-change="() => load()"
     />
 
     <el-dialog v-model="dialogVisible" :title="editingTask ? '編輯任務' : '新增任務'" width="600px">

@@ -110,3 +110,74 @@ func (s *TaskExecutionLogService) GetTaskStats(taskID string) (*models.TaskStats
 	}
 	return stats, nil
 }
+
+// dashboardStatsQuery 統計口徑同 taskStatsQuery，只是不鎖定單一 task_id
+func (s *TaskExecutionLogService) dashboardStatsQuery() *gorm.DB {
+	return s.db.Model(&models.TaskExecutionLog{}).
+		Where("source = ? AND is_final_attempt = ?", models.SOURCE_CRON, true)
+}
+
+// GetDashboardStats 全站儀表板：任務啟用/停用數、近 24 小時執行次數與成功率、
+// 近 24 小時失敗 Top 5 任務、目前連續失敗中的任務，即時 SQL 聚合，不做 cache
+func (s *TaskExecutionLogService) GetDashboardStats() (*models.DashboardStats, error) {
+	cutoff := time.Now().Add(-24 * time.Hour).Unix()
+
+	var statusCounts []struct {
+		Status string
+		N      int64
+	}
+	if err := s.db.Model(&models.Task{}).Select("status, COUNT(*) AS n").Group("status").Scan(&statusCounts).Error; err != nil {
+		return nil, err
+	}
+	var enabled, disabled int64
+	for _, sc := range statusCounts {
+		switch sc.Status {
+		case models.STATUS_ENABLED:
+			enabled = sc.N
+		case models.STATUS_DISABLED:
+			disabled = sc.N
+		}
+	}
+
+	var total24h, success24h int64
+	if err := s.dashboardStatsQuery().Where("created_at >= ?", cutoff).Count(&total24h).Error; err != nil {
+		return nil, err
+	}
+	if err := s.dashboardStatsQuery().
+		Where("created_at >= ? AND status = ?", cutoff, models.EXEC_STATUS_SUCCESS).
+		Count(&success24h).Error; err != nil {
+		return nil, err
+	}
+
+	var topFailing []models.DashboardFailingTask
+	if err := s.dashboardStatsQuery().
+		Joins("JOIN tasks ON tasks.id = task_execution_logs.task_id").
+		Where("task_execution_logs.created_at >= ? AND task_execution_logs.status = ?", cutoff, models.EXEC_STATUS_FAILED).
+		Group("tasks.id, tasks.name").
+		Select("tasks.id AS task_id, tasks.name AS task_name, COUNT(*) AS fail_count").
+		Order("fail_count DESC").
+		Limit(5).
+		Scan(&topFailing).Error; err != nil {
+		return nil, err
+	}
+
+	var currentlyFailing []models.DashboardTaskRef
+	if err := s.db.Model(&models.Task{}).
+		Where("consecutive_failures > 0").
+		Select("id AS task_id, name AS task_name").
+		Scan(&currentlyFailing).Error; err != nil {
+		return nil, err
+	}
+
+	stats := &models.DashboardStats{
+		TotalTasksEnabled:  enabled,
+		TotalTasksDisabled: disabled,
+		Executions24h:      total24h,
+		TopFailingTasks24h: topFailing,
+		CurrentlyFailing:   currentlyFailing,
+	}
+	if total24h > 0 {
+		stats.SuccessRate24h = float64(success24h) / float64(total24h) * 100
+	}
+	return stats, nil
+}

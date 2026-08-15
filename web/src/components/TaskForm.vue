@@ -4,8 +4,9 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { Delete, Plus } from '@element-plus/icons-vue'
 import CronInput from './CronInput.vue'
 import { listTaskGroups } from '../api/taskGroups'
+import { getNotifyConfig } from '../api/tasks'
 import { useAuthStore } from '../stores/auth'
-import type { Task, TaskGroup, TaskWriteDTO } from '../types'
+import type { NotifyConfig, Task, TaskGroup, TaskWriteDTO } from '../types'
 
 const props = defineProps<{ initial?: Task }>()
 const emit = defineEmits<{ submit: [payload: TaskWriteDTO] }>()
@@ -13,6 +14,7 @@ const emit = defineEmits<{ submit: [payload: TaskWriteDTO] }>()
 const auth = useAuthStore()
 const groups = ref<TaskGroup[]>([])
 const formRef = ref<FormInstance>()
+const notifyConfig = ref<NotifyConfig>()
 
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 
@@ -66,6 +68,7 @@ watch(
 onMounted(async () => {
   // ponytail: 下拉選單需要「全部群組」，用大 limit 取代真正的全量 API；群組數量大到 1000 筆時再改成搜尋式下拉
   groups.value = (await listTaskGroups({ limit: 1000 })).groups
+  notifyConfig.value = await getNotifyConfig()
 })
 
 const rules: FormRules<TaskWriteDTO> = {
@@ -180,6 +183,11 @@ defineExpose({ handleSubmit })
         <el-checkbox v-model="form.notify_slack">Slack</el-checkbox>
         <el-checkbox v-model="form.notify_email">Email</el-checkbox>
       </div>
+      <div v-if="notifyConfig">
+        <span v-if="form.notify_telegram && !notifyConfig.telegram_configured" class="notify-warning">Telegram 尚未設定，通知不會送出</span>
+        <span v-if="form.notify_slack && !notifyConfig.slack_configured" class="notify-warning">Slack 尚未設定，通知不會送出</span>
+        <span v-if="form.notify_email && !notifyConfig.email_configured" class="notify-warning">Email 尚未設定，通知不會送出</span>
+      </div>
     </el-form-item>
     <el-form-item label="狀態">
       <el-switch
@@ -202,6 +210,11 @@ defineExpose({ handleSubmit })
 .hint {
   margin: 0 8px;
   color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+.notify-warning {
+  display: block;
+  color: var(--el-color-danger);
   font-size: 13px;
 }
 </style>

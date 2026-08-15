@@ -22,6 +22,18 @@ function formatTime(unixSeconds: number) {
     :default-sort="{ prop: 'started_at', order: 'descending' }"
     @sort-change="$emit('sort-change', $event)"
   >
+    <el-table-column type="expand">
+      <template #default="{ row }">
+        <div style="padding: 0 16px 16px 60px">
+          <p><strong>輸出</strong></p>
+          <pre style="white-space: pre-wrap; word-break: break-all; background: var(--el-fill-color-light); padding: 8px; border-radius: 4px">{{ row.output || '(無)' }}</pre>
+          <template v-if="row.error_message">
+            <p><strong>錯誤訊息</strong></p>
+            <pre style="white-space: pre-wrap; word-break: break-all; color: var(--el-color-danger)">{{ row.error_message }}</pre>
+          </template>
+        </div>
+      </template>
+    </el-table-column>
     <el-table-column v-if="showTask" prop="task.name" label="任務名稱" />
     <el-table-column v-if="showTask" prop="task.group.name" label="群組" />
     <el-table-column label="狀態" width="100">

@@ -34,9 +34,11 @@ func RegisterTaskJob(cs *CronScheduler, id string, task *models.Task) error {
 
 	switch task.Type {
 	case "http":
-		entryID, err = cs.Cron.AddFunc(task.Schedule, RunRequestHttp(cs.Log, cs.db, cs.restyClient, task, models.SOURCE_CRON))
+		runOnce := RunRequestHttp(cs.Log, cs.db, cs.restyClient, task, models.SOURCE_CRON)
+		entryID, err = cs.Cron.AddFunc(task.Schedule, func() { runOnce(cs.baseCtx) })
 	case "rpc":
-		entryID, err = cs.Cron.AddFunc(task.Schedule, RunRequestRpc(cs.Log, cs.db, task, models.SOURCE_CRON))
+		runOnce := RunRequestRpc(cs.Log, cs.db, task, models.SOURCE_CRON)
+		entryID, err = cs.Cron.AddFunc(task.Schedule, func() { runOnce(cs.baseCtx) })
 	default:
 		err = fmt.Errorf("unknown task type: %s", task.Type)
 	}
@@ -60,7 +62,7 @@ var ErrBatchNotFound = errors.New("no running batch for task")
 
 // jobFor 依 task.Type 回傳對應的單次執行 closure；未知 type 立刻回錯，
 // 讓 RunTaskNow 在開 goroutine 前就能讓呼叫端知道參數不對，而不是靜默不執行。
-func jobFor(cs *CronScheduler, task *models.Task, source string) (func(), error) {
+func jobFor(cs *CronScheduler, task *models.Task, source string) (func(ctx context.Context), error) {
 	switch task.Type {
 	case "http":
 		return RunRequestHttp(cs.Log, cs.db, cs.restyClient, task, source), nil
@@ -101,12 +103,10 @@ func RunTaskNow(cs *CronScheduler, task *models.Task, repeat int, intervalMs int
 			if ctx.Err() != nil {
 				return
 			}
-			runOnce()
+			runOnce(ctx)
 			if i == repeat-1 {
 				return
 			}
-			// ponytail: 取消只在兩次呼叫之間生效，進行中的那一發仍會跑完各自的逾時；
-			// 要中斷進行中的請求需讓 RunRequestHttp/RunRequestRpc 收 ctx，範圍較大，先不做
 			select {
 			case <-ctx.Done():
 				return
@@ -167,15 +167,16 @@ func parseHeaders(raw string, log *logger.LogrusAdapter, taskID string) map[stri
 
 // runWithRetry 驅動「最多 1+RetryCount 次」的執行迴圈：每次嘗試各寫一筆 TaskExecutionLog
 // （attemptNumber 從 1 起算），只有最後一次嘗試（次數用完，或這次錯誤不可重試）isFinalAttempt 才是 true；
-// 兩次嘗試之間依 RetryDelayMs 停頓，只在兩次呼叫之間生效，不會中斷正在進行中的那一次呼叫。
+// 兩次嘗試之間依 RetryDelayMs 停頓。每次嘗試的逾時掛在傳入的 parentCtx 底下，parentCtx 被取消
+// （立即執行按下取消批次，或排程關機）會讓正在進行中的那次呼叫也立刻中止，不必等滿逾時或重試跑完。
 // 最終結果只在 isFinalAttempt 那一刻才更新 ConsecutiveFailures / 觸發失敗通知。
-func runWithRetry(db *gorm.DB, log *logger.LogrusAdapter, task *models.Task, source string, attemptFn func(ctx context.Context) (status, output, errMsg string, retryable bool)) {
+func runWithRetry(parentCtx context.Context, db *gorm.DB, log *logger.LogrusAdapter, task *models.Task, source string, attemptFn func(ctx context.Context) (status, output, errMsg string, retryable bool)) {
 	attempts := 1 + task.RetryCount
 	timeout := time.Duration(taskTimeoutSeconds(task)) * time.Second
 
 	for attempt := 1; attempt <= attempts; attempt++ {
 		startedAt := time.Now().Unix()
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		ctx, cancel := context.WithTimeout(parentCtx, timeout)
 		status, output, errMsg, retryable := attemptFn(ctx)
 		cancel()
 
@@ -187,7 +188,11 @@ func runWithRetry(db *gorm.DB, log *logger.LogrusAdapter, task *models.Task, sou
 			return
 		}
 		if task.RetryDelayMs > 0 {
-			time.Sleep(time.Duration(task.RetryDelayMs) * time.Millisecond)
+			select {
+			case <-parentCtx.Done():
+				return
+			case <-time.After(time.Duration(task.RetryDelayMs) * time.Millisecond):
+			}
 		}
 	}
 }
@@ -267,10 +272,10 @@ func doHTTPAttempt(ctx context.Context, client *resty.Client, task *models.Task,
 	return models.EXEC_STATUS_SUCCESS, string(resp.Body()), "", false
 }
 
-func RunRequestHttp(log *logger.LogrusAdapter, db *gorm.DB, client *resty.Client, task *models.Task, source string) func() {
+func RunRequestHttp(log *logger.LogrusAdapter, db *gorm.DB, client *resty.Client, task *models.Task, source string) func(ctx context.Context) {
 	headers := parseHeaders(task.Headers, log, task.ID)
-	return func() {
-		runWithRetry(db, log, task, source, func(ctx context.Context) (string, string, string, bool) {
+	return func(parentCtx context.Context) {
+		runWithRetry(parentCtx, db, log, task, source, func(ctx context.Context) (string, string, string, bool) {
 			return doHTTPAttempt(ctx, client, task, headers)
 		})
 	}
@@ -336,10 +341,10 @@ func doRPCAttempt(ctx context.Context, task *models.Task, headers map[string]str
 // RunRequestRpc 透過 gRPC Server Reflection 動態呼叫任務設定的 service/method，
 // 不需要預先產生的 pb.go stub：Endpoint 為 "host:port"，Method 為 "package.Service/MethodName"，
 // Payload 為要灌入 request 訊息的 JSON 字串。
-func RunRequestRpc(log *logger.LogrusAdapter, db *gorm.DB, task *models.Task, source string) func() {
+func RunRequestRpc(log *logger.LogrusAdapter, db *gorm.DB, task *models.Task, source string) func(ctx context.Context) {
 	headers := parseHeaders(task.Headers, log, task.ID)
-	return func() {
-		runWithRetry(db, log, task, source, func(ctx context.Context) (string, string, string, bool) {
+	return func(parentCtx context.Context) {
+		runWithRetry(parentCtx, db, log, task, source, func(ctx context.Context) (string, string, string, bool) {
 			return doRPCAttempt(ctx, task, headers)
 		})
 	}

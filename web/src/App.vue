@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Folder, Histogram, List } from '@element-plus/icons-vue'
+import { Folder, Histogram, List, Odometer } from '@element-plus/icons-vue'
 import { useAuthStore } from './stores/auth'
+import { autoRefreshEnabled } from './composables/useAutoRefresh'
 
 const auth = useAuthStore()
 </script>
@@ -9,11 +10,13 @@ const auth = useAuthStore()
   <el-container class="app-shell">
     <el-header class="app-header">
       <el-menu mode="horizontal" router :ellipsis="false" class="app-menu">
+        <el-menu-item index="/dashboard"><el-icon><Odometer /></el-icon>儀表板</el-menu-item>
         <el-menu-item index="/tasks"><el-icon><List /></el-icon>任務</el-menu-item>
         <el-menu-item index="/groups"><el-icon><Folder /></el-icon>任務群組</el-menu-item>
         <el-menu-item index="/executions"><el-icon><Histogram /></el-icon>執行紀錄</el-menu-item>
       </el-menu>
       <div class="app-user">
+        <el-switch v-model="autoRefreshEnabled" active-text="自動刷新" />
         <span>{{ auth.user?.user_name }}</span>
       </div>
     </el-header>

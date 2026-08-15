@@ -86,3 +86,15 @@ func (ctrl *TaskExecutionLogController) GetTaskStatsHandler(c *gin.Context) {
 
 	response.Success(c, stats, "成功獲取任務統計")
 }
+
+// GetDashboardStatsHandler 取得全站儀表板統計
+func (ctrl *TaskExecutionLogController) GetDashboardStatsHandler(c *gin.Context) {
+	stats, err := ctrl.services.TaskExecutionLogService.GetDashboardStats()
+	if err != nil {
+		logger.WithTrace(c).Error(err.Error())
+		response.Fail(c, http.StatusInternalServerError, "取得儀表板統計失敗", nil)
+		return
+	}
+
+	response.Success(c, stats, "成功獲取儀表板統計")
+}

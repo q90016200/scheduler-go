@@ -6,7 +6,7 @@ scheduler-tool/
 │       └── migrate.go
 ├── config/                 # 配置檔案和初始化
 │   └── config.go
-├── docker/                 # 本地開發用 docker-compose（postgres、redis，redis 目前未被程式使用）
+├── docker/                 # 本地開發用 docker-compose（postgres）
 │   ├── docker-compose.yaml
 │   └── postgres/
 ├── internal/               # 私有應用程式邏輯
@@ -20,7 +20,8 @@ scheduler-tool/
 │   │   ├── auth_controller.go
 │   │   ├── user_controller.go           # 使用者管理控制器
 │   │   ├── task_controller.go           # 任務與群組管理控制器
-│   │   └── task_execution_log_controller.go # 任務執行紀錄控制器
+│   │   ├── task_execution_log_controller.go # 任務執行紀錄與（全站/單一任務）儀表板控制器
+│   │   └── notify_controller.go         # 回報通知管道是否已在 .env 設定（不回傳憑證本身）
 │   ├── models/             # 資料結構和資料庫模型
 │   │   ├── user.go
 │   │   ├── task.go                # 任務、群組模型
@@ -66,7 +67,7 @@ scheduler-tool/
    docker compose up -d
    ```
 
-   會啟動 `postgres:16`（5432，資料存放於 `docker/postgres/data`）與 `redis`（6379，目前程式尚未使用，可自行從 `docker-compose.yaml` 註解掉）。要停止則執行 `docker compose down`。
+   會啟動 `postgres:16`（5432，資料存放於 `docker/postgres/data`）。要停止則執行 `docker compose down`。
 
 3. **執行資料庫遷移**
 
@@ -132,8 +133,8 @@ scheduler-tool/
 - `GET /:id`、`POST /`、`PUT /:id`（整包更新，`name`/`schedule`/`type`/`endpoint` 皆為必填）、`DELETE /:id`
 - `PATCH /:id/status`（body 僅需 `{"status": "enabled"|"disabled", "user_id": "..."}`，只切換啟用狀態，不需送整包任務資料）
 - `POST /:id/run`（立即執行，不受排程狀態影響；非同步觸發，呼叫後立刻回傳）。body 可選帶 `{"repeat": 1-50, "interval_ms": 100-60000}` 指定重複執行次數與每次呼叫的間隔毫秒數，省略時預設執行 1 次；同一任務同時只允許一個進行中的重複批次，重複觸發會回 409。中途某次執行失敗不會中斷剩下的次數，每次執行都各自寫入一筆執行紀錄。立即執行（手動觸發）不套用失敗通知門檻計數，避免測試時誤觸發通知。
-- `DELETE /:id/run`（取消該任務目前進行中的重複批次，只會阻止尚未發出的下一次執行，已送出的那一發仍會跑完；找不到進行中的批次回 404）
-- `GET /:id/stats`（執行儀表板小面板：近 30 天成功率 `success_rate_30d`、近 30 天平均耗時 `avg_duration_ms_30d`（毫秒）、最近 10 次中失敗次數 `recent_fail_count`；只採計排程自動觸發、且是該次觸發最終結果的紀錄，即時 SQL 聚合，不做快取）
+- `DELETE /:id/run`（取消該任務目前進行中的重複批次；會立刻中斷正在進行中的那一發 HTTP/RPC 呼叫與剩餘的重試，不必等它自然逾時或重試跑完，中斷的那筆會記為失敗、錯誤訊息帶 `context canceled`；找不到進行中的批次回 404）
+- `GET /:id/stats`（單一任務執行儀表板小面板：近 30 天成功率 `success_rate_30d`、近 30 天平均耗時 `avg_duration_ms_30d`（毫秒）、最近 10 次中失敗次數 `recent_fail_count`；只採計排程自動觸發、且是該次觸發最終結果的紀錄，即時 SQL 聚合，不做快取）
 - 建立/更新時 `type` 限定 `http`/`rpc`、`schedule` 必須是合法的標準 cron 表達式，兩者驗證失敗會在寫入資料庫前被擋下（回 400），不會留下無法排程的孤兒資料。
 - 任務新增以下欄位（皆選填，有預設值）：
   - `retry_count`（0-5，失敗時額外重試次數）、`retry_delay_ms`（0-30000，每次重試間隔毫秒，固定值不做指數退避）
@@ -149,6 +150,10 @@ scheduler-tool/
 - `attempt_number`（第幾次嘗試，第一次是 1）、`is_final_attempt`（是否為這次觸發（含所有重試）的最後一筆；設有 `retry_count` 的任務失敗重試時，每次嘗試各存一筆，只有最後一筆會是 `true`）
 
 **失敗重試與通知**：任務失敗（網路錯誤/逾時/HTTP 5xx）時依 `retry_count`/`retry_delay_ms` 重試；HTTP 4xx 與參數格式錯誤（例如 method/payload 格式不對）視為不可重試，直接判定為這次觸發的最終結果。只有排程自動觸發（`source=cron`）的最終結果才會累加/清零任務的連續失敗次數：失敗 +1、成功清零；連續失敗次數剛好等於 `notify_fail_threshold` 的那一刻，依任務勾選的管道（Telegram/Slack/Email）非同步發送一次通知，之後即使繼續失敗也靜音，直到成功一次重新累積才會再通知一次。通知發送失敗只記 log，不重試、不影響任務執行本身。
+
+**儀表板**（`/api/dashboard`）：`GET /stats`，回傳全站統計——啟用/停用任務數、近 24 小時執行次數與成功率、近 24 小時失敗次數 Top 5 任務、目前連續失敗中的任務清單；統計口徑與 `/tasks/:id/stats` 相同（只採計 `source=cron` 且為該次觸發最終結果的紀錄），即時 SQL 聚合，不做快取。
+
+**通知設定狀態**（`/api/notify`）：`GET /config`，回傳 `{telegram_configured, slack_configured, email_configured}` 三個布林值，只看對應的 `.env` 欄位是否已填，不回傳任何 token/密碼本身；供前端在任務表單提醒使用者「勾了某管道但 `.env` 沒設定，通知不會送出」。
 
 ## 安全性
 
@@ -172,3 +177,5 @@ npm run build    # 產出 web/dist，供 Go 後端同源服務
 ```
 
 正式部署：`cd web && npm run build` 產出 `web/dist/`，與 Go 執行檔放在同一相對路徑下啟動（`go run main.go` 或編譯後的 binary），`internal/router/router.go` 會直接服務這個資料夾並提供 SPA fallback，不需要額外的 nginx。開發模式下 Vite dev server 也透過 proxy 讓瀏覽器端請求保持同源，因此整個專案不需要 CORS middleware。
+
+首頁為 `/dashboard`（全站儀表板），任務清單頁每 120 秒、其餘清單頁與詳情頁每 30 秒自動背景刷新（不會蓋整頁 loading，靜默換資料），可在導覽列右上角的開關關閉，設定存在瀏覽器 `localStorage`、全站共用。

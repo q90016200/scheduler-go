@@ -4,6 +4,7 @@ import { Refresh } from '@element-plus/icons-vue'
 import ExecutionLogTable from '../components/ExecutionLogTable.vue'
 import IconButton from '../components/IconButton.vue'
 import { listExecutionLogs } from '../api/executionLogs'
+import { useAutoRefresh } from '../composables/useAutoRefresh'
 import type { ExecutionLog, ExecutionStatus, SortOrder } from '../types'
 
 const props = defineProps<{ id: string }>()
@@ -18,8 +19,8 @@ const filters = reactive<{ status: ExecutionStatus | ''; sort_field: 'started_at
   sort_order: 'desc',
 })
 
-async function load() {
-  loading.value = true
+async function load(silent = false) {
+  if (!silent) loading.value = true
   try {
     const result = await listExecutionLogs({
       task_id: props.id,
@@ -32,9 +33,11 @@ async function load() {
     logs.value = result.logs
     total.value = result.total
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
+
+useAutoRefresh(() => load(true), 30000)
 
 function reloadFromFirstPage() {
   page.value = 1
@@ -59,7 +62,7 @@ onMounted(load)
           <el-option label="成功" value="success" />
           <el-option label="失敗" value="failed" />
         </el-select>
-        <IconButton :icon="Refresh" label="重新整理" :loading="loading" @click="load" />
+        <IconButton :icon="Refresh" label="重新整理" :loading="loading" @click="() => load()" />
       </div>
     </div>
     <ExecutionLogTable :logs="logs" :show-task="false" @sort-change="handleSortChange" />
@@ -69,7 +72,7 @@ onMounted(load)
       :total="total"
       layout="prev, pager, next"
       style="margin-top: 16px"
-      @current-change="load"
+      @current-change="() => load()"
     />
   </el-card>
 </template>

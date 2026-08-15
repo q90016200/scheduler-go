@@ -23,20 +23,15 @@ func OpenTracingMiddleware() gin.HandlerFunc {
 
 		start := time.Now()
 
-		// 記錄請求開始的日誌
-		log := logger.WithTrace(c)
-		log.WithFields(logrus.Fields{
-			"method": c.Request.Method,
-			"path":   c.Request.URL.Path,
-		}).Info("收到新的請求")
-
 		// 處理請求
 		c.Next()
 
-		// 記錄請求結束的日誌
-		log.WithFields(logrus.Fields{
+		// 請求開始與結束合併成一行，避免每個請求印兩行 Info（自動刷新等高頻輪詢會讓 log 量翻倍）
+		logger.WithTrace(c).WithFields(logrus.Fields{
+			"method":      c.Request.Method,
+			"path":        c.Request.URL.Path,
 			"status":      c.Writer.Status(),
 			"duration_ms": time.Since(start).Milliseconds(),
-		}).Info("請求結束")
+		}).Info("請求完成")
 	}
 }

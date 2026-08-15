@@ -6,6 +6,7 @@ import StatusTag from '../components/StatusTag.vue'
 import IconButton from '../components/IconButton.vue'
 import RunTaskDialog from '../components/RunTaskDialog.vue'
 import { getTask, getTaskStats } from '../api/tasks'
+import { useAutoRefresh } from '../composables/useAutoRefresh'
 import type { Task, TaskStats } from '../types'
 
 const props = defineProps<{ id: string }>()
@@ -25,12 +26,13 @@ async function load() {
 }
 
 onMounted(load)
+useAutoRefresh(load, 30000)
 </script>
 
 <template>
   <el-card v-if="task">
     <div class="toolbar">
-      <IconButton :icon="Back" label="返回清單" @click="router.push('/tasks')" />
+      <IconButton :icon="Back" label="返回" @click="router.back()" />
       <IconButton :icon="VideoPlay" label="立即執行" @click="runDialogVisible = true" />
       <IconButton :icon="Document" label="執行紀錄" @click="router.push(`/tasks/${task.id}/executions`)" />
     </div>
