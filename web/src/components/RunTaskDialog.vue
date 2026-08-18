@@ -124,7 +124,7 @@ function handleClose() {
 </script>
 
 <template>
-  <el-dialog :model-value="visible" title="立即執行" width="600px" @update:model-value="emit('update:visible', $event)" @close="resetDialog">
+  <el-dialog :model-value="visible" title="立即執行" width="600px" append-to-body @update:model-value="emit('update:visible', $event)" @close="resetDialog">
     <template v-if="stage === 'form'">
       <el-form label-width="100px">
         <el-form-item label="重複次數">

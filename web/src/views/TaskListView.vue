@@ -195,7 +195,7 @@ async function handleSubmit(payload: TaskWriteDTO) {
       @current-change="() => load()"
     />
 
-    <el-dialog v-model="dialogVisible" :title="editingTask ? '編輯任務' : '新增任務'" width="600px">
+    <el-dialog v-model="dialogVisible" :title="editingTask ? '編輯任務' : '新增任務'" width="600px" append-to-body>
       <TaskForm v-if="dialogVisible" ref="formRef" :initial="editingTask" @submit="handleSubmit" />
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>

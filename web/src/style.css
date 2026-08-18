@@ -1,13 +1,25 @@
 :root {
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --sans: -apple-system, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --heading: var(--sans);
   --mono: ui-monospace, Consolas, monospace;
+
+  /* liquid-glass tokens — light */
+  --text: oklch(0.24 0.02 260);
+  --text-muted: oklch(0.46 0.02 260);
+  --accent: oklch(0.55 0.19 258);
+  --danger: oklch(0.55 0.18 25);
+  --glass-bg: oklch(1 0 0 / 0.55);
+  --glass-bg-strong: oklch(1 0 0 / 0.82);
+  --glass-border: oklch(1 0 0 / 0.65);
+  --glass-shadow: oklch(0.3 0.03 260 / 0.14);
+  --glass-blur: blur(20px) saturate(180%);
+  --radius-lg: 20px;
+  --radius-md: 14px;
 
   font: 18px/145% var(--sans);
   letter-spacing: 0.18px;
   color-scheme: light dark;
-  color: var(--el-text-color-regular);
-  background: var(--el-bg-color);
+  color: var(--text);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -16,10 +28,75 @@
   @media (max-width: 1024px) {
     font-size: 16px;
   }
+
+  /* Element Plus theming */
+  --el-font-family: var(--sans);
+  --el-border-radius-base: 10px;
+  --el-border-radius-small: 8px;
+
+  --el-color-primary: var(--accent);
+  --el-color-primary-light-3: color-mix(in oklch, var(--accent) 75%, white);
+  --el-color-primary-light-5: color-mix(in oklch, var(--accent) 55%, white);
+  --el-color-primary-light-7: color-mix(in oklch, var(--accent) 35%, white);
+  --el-color-primary-light-8: color-mix(in oklch, var(--accent) 25%, white);
+  --el-color-primary-light-9: color-mix(in oklch, var(--accent) 12%, white);
+  --el-color-primary-dark-2: color-mix(in oklch, var(--accent) 80%, black);
+
+  --el-text-color-primary: var(--text);
+  --el-text-color-regular: var(--text);
+  --el-text-color-secondary: var(--text-muted);
+
+  --el-bg-color: var(--glass-bg);
+  --el-bg-color-overlay: var(--glass-bg-strong);
+  --el-bg-color-page: transparent;
+  --el-fill-color-blank: var(--glass-bg);
+  --el-fill-color-light: oklch(1 0 0 / 0.35);
+  --el-fill-color-lighter: oklch(1 0 0 / 0.25);
+
+  --el-border-color: var(--glass-border);
+  --el-border-color-light: var(--glass-border);
+  --el-border-color-lighter: var(--glass-border);
+}
+
+html.dark {
+  --text: oklch(0.92 0.005 260);
+  --text-muted: oklch(0.65 0.01 260);
+  --accent: oklch(0.75 0.15 258);
+  --danger: oklch(0.68 0.17 25);
+  --glass-bg: oklch(0.32 0.012 260 / 0.55);
+  --glass-bg-strong: oklch(0.26 0.014 260 / 0.86);
+  --glass-border: oklch(1 0 0 / 0.12);
+  --glass-shadow: oklch(0 0 0 / 0.4);
+
+  --el-color-primary-light-3: color-mix(in oklch, var(--accent) 75%, black);
+  --el-color-primary-light-5: color-mix(in oklch, var(--accent) 55%, black);
+  --el-color-primary-light-7: color-mix(in oklch, var(--accent) 35%, black);
+  --el-color-primary-light-8: color-mix(in oklch, var(--accent) 25%, black);
+  --el-color-primary-light-9: color-mix(in oklch, var(--accent) 12%, black);
+  --el-color-primary-dark-2: color-mix(in oklch, var(--accent) 70%, white);
+
+  --el-fill-color-blank: var(--glass-bg);
+  --el-fill-color-light: oklch(1 0 0 / 0.06);
+  --el-fill-color-lighter: oklch(1 0 0 / 0.04);
 }
 
 body {
   margin: 0;
+  min-height: 100svh;
+  background:
+    radial-gradient(720px 520px at 8% 0%, oklch(0.82 0.11 250 / 0.4), transparent 60%),
+    radial-gradient(760px 560px at 96% 12%, oklch(0.84 0.09 320 / 0.35), transparent 60%),
+    radial-gradient(820px 600px at 30% 100%, oklch(0.86 0.08 20 / 0.3), transparent 65%),
+    oklch(0.96 0.006 260);
+  background-attachment: fixed;
+}
+html.dark body {
+  background:
+    radial-gradient(720px 520px at 8% 0%, oklch(0.4 0.1 250 / 0.35), transparent 60%),
+    radial-gradient(760px 560px at 96% 12%, oklch(0.42 0.1 320 / 0.3), transparent 60%),
+    radial-gradient(820px 600px at 30% 100%, oklch(0.4 0.09 20 / 0.25), transparent 65%),
+    oklch(0.16 0.01 260);
+  background-attachment: fixed;
 }
 
 h1,
@@ -68,4 +145,52 @@ code {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+}
+
+/* liquid-glass surfaces */
+.el-card {
+  border-radius: var(--radius-lg) !important;
+  background-color: var(--glass-bg) !important;
+  border-color: var(--glass-border) !important;
+  box-shadow: 0 8px 28px var(--glass-shadow), inset 0 1px 0 oklch(1 0 0 / 0.5) !important;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+.el-card__header {
+  border-color: var(--glass-border) !important;
+}
+
+.el-dialog,
+.el-message-box,
+.el-drawer {
+  border-radius: var(--radius-lg) !important;
+  background-color: var(--glass-bg-strong) !important;
+  box-shadow: 0 16px 48px var(--glass-shadow) !important;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+.el-dialog__header,
+.el-dialog__footer {
+  border-color: var(--glass-border) !important;
+}
+
+.el-popper.is-light,
+.el-dropdown-menu,
+.el-select-dropdown,
+.el-picker-panel {
+  border-radius: var(--radius-md) !important;
+  background-color: var(--glass-bg-strong) !important;
+  border-color: var(--glass-border) !important;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.el-table,
+.el-table tr,
+.el-table th.el-table__cell {
+  background-color: transparent !important;
+}
+.el-table::before,
+.el-table__inner-wrapper::before {
+  display: none;
 }

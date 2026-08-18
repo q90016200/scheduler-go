@@ -134,7 +134,7 @@ async function handleDelete(user: User) {
       @current-change="load"
     />
 
-    <el-dialog v-model="dialogVisible" :title="editingUser ? '編輯使用者' : '新增使用者'" width="500px">
+    <el-dialog v-model="dialogVisible" :title="editingUser ? '編輯使用者' : '新增使用者'" width="500px" append-to-body>
       <UserForm v-if="dialogVisible" ref="formRef" :initial="editingUser" @submit="handleSubmit" />
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
