@@ -101,6 +101,18 @@ scheduler-tool/
 
    涵蓋 `internal/scheduler`（cron 註冊/錯誤路徑、HTTP 4xx 不重試／5xx 重試的分類、重新註冊同一任務會取代舊 cron entry 而非留下重複排程，以及立即執行的重複次數、併發批次拒絕、取消）與 `internal/ssrf`（SSRF 連線防護）。排程相關程式碼可另外用 `go test -race ./internal/scheduler/...` 檢查併發安全。
 
+## Docker 部署
+
+repo 根目錄的 `Dockerfile` 為多階段建置（前端 `npm run build` → Go 編譯 `server` 與 `migrate` → `alpine` 執行映像，非 root 使用者）。設定一律走環境變數，映像內不含 `.env`：
+
+```bash
+docker build -t schedule-go .
+docker run --rm --env-file .env schedule-go ./migrate   # 遷移
+docker run -d -p 8080:8080 --env-file .env schedule-go   # 啟動
+```
+
+`.env` 裡的 `POSTGRES_HOST` 要改成容器可達的位址（例如 `host.docker.internal`，而非 `127.0.0.1`）。映像內建 `HEALTHCHECK`，打 `GET /healthz`。
+
 ## 環境變數 (.env)
 
 | 變數 | 說明 | 預設 |
@@ -122,6 +134,8 @@ scheduler-tool/
 ## API 端點
 
 > **登入/註冊目前暫時停用**：`JWTAuthMiddleware` 未掛載在任何路由上，前端也拿掉了未登入導向 `/login` 的守衛，所有端點與頁面皆可直接使用，不需登入。以下「需登入」標註為停用前的原始設計，之後要恢復可參考 `internal/router/router.go`。
+
+**健康檢查**：`GET /healthz`（在 `/api` 之外，不掛 tracing，也不寫進 gin access log）。資料庫 ping 成功回 200 `{"status":"ok"}`，失敗回 503，供容器/負載平衡器探測。
 
 **Auth**（`/api/auth`）：`POST /register`、`POST /login`（設定 `auth_token` HttpOnly cookie；帳號 `status` 為 `disabled` 時登入會被拒絕）、`POST /logout`、`GET /me`（取得目前使用者，需帶有效 cookie 才有意義）。
 

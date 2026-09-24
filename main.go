@@ -42,8 +42,9 @@ func main() {
 	if !config.AppConfig.IsDevelopment() {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	r := gin.Default()
-	r = router.SetupRouter(r, services)
+	r := gin.New()
+	r.Use(gin.LoggerWithConfig(gin.LoggerConfig{SkipPaths: []string{"/healthz"}}), gin.Recovery())
+	r = router.SetupRouter(r, services, db)
 
 	// 啟動排程器
 	cronScheduler.StartScheduler()

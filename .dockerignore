@@ -1,0 +1,11 @@
+.git
+.idea
+.claude
+.scratch
+.DS_Store
+.env
+logs
+bin
+docker
+web/node_modules
+web/dist
