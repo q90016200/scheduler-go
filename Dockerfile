@@ -9,7 +9,7 @@ COPY web/ ./
 RUN npm run build
 
 # ---- 後端 ----
-FROM golang:1.26.6-alpine AS go
+FROM golang:1.27.1-alpine AS go
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
