@@ -8,6 +8,7 @@ import (
 	"github.com/q90016200/scheduler-go/pkg/logger"
 	"github.com/rs/xid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type TaskService struct {
@@ -334,19 +335,19 @@ func (s *TaskService) CreateTaskGroup(input models.CreateTaskGroupReq) (*models.
 	return group, nil
 }
 
-// deactivateGroupTasksTx 在交易內找出群組底下仍為 active 的任務並批次轉為 inactive，
-// 回傳被停用的任務清單（供呼叫端在交易 commit 後取消其 cron 排程）
+// deactivateGroupTasksTx 在交易內把群組底下仍為 enabled 的任務批次轉為 disabled，
+// 回傳被停用的任務清單（供呼叫端在交易 commit 後取消其 cron 排程）。
+// 用單一 UPDATE ... RETURNING 而不是先 Find 再 Update：兩條敘述之間若有任務被別的請求改成
+// enabled，Find-then-Update 會漏抓到它（UPDATE 仍會把它一併停用，但不會出現在回傳清單裡，
+// 就永遠不會呼叫 UnregisterTaskJob）。RETURNING 讓「哪些列被改」跟「改成什麼」在同一個敘述完成。
 func (s *TaskService) deactivateGroupTasksTx(tx *gorm.DB, groupID string) ([]models.Task, error) {
 	var tasks []models.Task
-	if err := tx.Where("group_id = ? AND status = ?", groupID, models.STATUS_ENABLED).Find(&tasks).Error; err != nil {
+	err := tx.Model(&tasks).
+		Clauses(clause.Returning{Columns: []clause.Column{{Name: "id"}, {Name: "name"}}}).
+		Where("group_id = ? AND status = ?", groupID, models.STATUS_ENABLED).
+		Update("status", models.STATUS_DISABLED).Error
+	if err != nil {
 		return nil, err
-	}
-	if len(tasks) > 0 {
-		if err := tx.Model(&models.Task{}).
-			Where("group_id = ? AND status = ?", groupID, models.STATUS_ENABLED).
-			Update("status", models.STATUS_DISABLED).Error; err != nil {
-			return nil, err
-		}
 	}
 	return tasks, nil
 }

@@ -1,8 +1,14 @@
+export interface ValidationFieldError {
+  field: string
+  tag: string
+  param: string
+}
+
 export interface ApiEnvelope<T> {
   code: number
   message: string
   data: T
-  error: unknown
+  error: string | ValidationFieldError[] | unknown
   trace: string
 }
 

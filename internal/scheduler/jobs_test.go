@@ -141,3 +141,58 @@ func TestCancelTaskRunStopsRemainingRequests(t *testing.T) {
 		t.Fatalf("expected exactly 1 request after cancel, got %d", got)
 	}
 }
+
+func TestDoHTTPAttempt4xxNotRetried(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	log := &logger.LogrusAdapter{Logger: logrus.New()}
+	task := &models.Task{ID: "http4xx", Type: "http", Method: "GET", Endpoint: srv.URL, RetryCount: 2, RetryDelayMs: 0}
+
+	RunRequestHttp(log, nil, resty.New(), task, models.SOURCE_CRON)(context.Background())
+
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("expected exactly 1 request for a non-retryable 4xx, got %d", got)
+	}
+}
+
+func TestDoHTTPAttempt5xxRetried(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	log := &logger.LogrusAdapter{Logger: logrus.New()}
+	task := &models.Task{ID: "http5xx", Type: "http", Method: "GET", Endpoint: srv.URL, RetryCount: 2, RetryDelayMs: 0}
+
+	RunRequestHttp(log, nil, resty.New(), task, models.SOURCE_CRON)(context.Background())
+
+	if got := hits.Load(); got != 3 {
+		t.Fatalf("expected 3 requests (1 + 2 retries) for a retryable 5xx, got %d", got)
+	}
+}
+
+func TestRegisterTaskJobReplacesOldEntry(t *testing.T) {
+	cs := newTestScheduler()
+	task := &models.Task{ID: "t5", Type: "http", Schedule: "* * * * *", Method: "GET", Endpoint: "http://example.com"}
+
+	if err := RegisterTaskJob(cs, task.ID, task); err != nil {
+		t.Fatalf("first RegisterTaskJob returned error: %v", err)
+	}
+	if err := RegisterTaskJob(cs, task.ID, task); err != nil {
+		t.Fatalf("second RegisterTaskJob returned error: %v", err)
+	}
+
+	if got := len(cs.Cron.Entries()); got != 1 {
+		t.Fatalf("expected exactly 1 cron entry after re-registering the same task, got %d", got)
+	}
+	if got := len(cs.taskCronEntryIDs); got != 1 {
+		t.Fatalf("expected exactly 1 map entry after re-registering the same task, got %d", got)
+	}
+}

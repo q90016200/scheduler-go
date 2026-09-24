@@ -34,6 +34,8 @@ scheduler-tool/
 │   ├── scheduler/          # cron 排程器，執行 http/rpc 任務、記錄執行結果、清除過期紀錄
 │   │   ├── cron.go              # cron.Recover 防護、每分鐘 poller、SSRF 防護的 resty client
 │   │   └── jobs.go
+│   ├── notify/             # 失敗通知管道（telegram.go / slack.go / email.go），由 jobs.go 呼叫
+│   ├── ssrf/               # 任務執行連線的 SSRF 防護（ssrf.go，見下方「安全性」）
 │   ├── middleware/         # 中介軟體
 │   │   ├── auth_middleware.go
 │   │   └── tracing_middleware.go # trace_id（沿用 X-Request-ID 或自動產生）
@@ -42,7 +44,7 @@ scheduler-tool/
 ├── pkg/                    # 公用元件（工具、輔助功能等）
 │   ├── logger/             # 日誌記錄（stdout 彩色 / 檔案 JSON 分流，見下方「日誌與追蹤」）
 │   ├── response/           # API 回應封裝
-│   └── utils/              # 驗證器、SSRF 連線防護（ssrf.go）等公用工具
+│   └── utils/              # 驗證器（validator.go）等公用工具
 ├── web/                    # Vue3 + TypeScript + Vite 前端（獨立專案，見下方「前端開發」）
 ├── .env                    # 環境變數配置
 ├── go.mod                  # Go modules 配置
@@ -97,7 +99,7 @@ scheduler-tool/
    go test ./...
    ```
 
-   涵蓋 `internal/scheduler`（cron 註冊/錯誤路徑，以及立即執行的重複次數、併發批次拒絕、取消）與 `pkg/utils`（SSRF 連線防護）。排程相關程式碼可另外用 `go test -race ./internal/scheduler/...` 檢查併發安全。
+   涵蓋 `internal/scheduler`（cron 註冊/錯誤路徑、HTTP 4xx 不重試／5xx 重試的分類、重新註冊同一任務會取代舊 cron entry 而非留下重複排程，以及立即執行的重複次數、併發批次拒絕、取消）與 `internal/ssrf`（SSRF 連線防護）。排程相關程式碼可另外用 `go test -race ./internal/scheduler/...` 檢查併發安全。
 
 ## 環境變數 (.env)
 

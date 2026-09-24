@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/go-resty/resty/v2"
 	"github.com/q90016200/scheduler-go/config"
@@ -68,6 +69,35 @@ func (cs *CronScheduler) jobCount() int {
 	return len(cs.taskCronEntryIDs)
 }
 
+// registerIfStillEnabled 供每分鐘 poller 使用：task 是否仍為 enabled 的判斷跟註冊動作
+// 必須在同一次持鎖期間完成，否則會有 race——poller 先 SELECT 出一批 enabled 任務的快照，
+// 若在它跑到某個 task 之前，該 task 被 disable/刪除且 UnregisterTaskJob 已經執行過，
+// poller 若只憑舊快照直接註冊，就會把一個已經停用的任務重新排回 cron、永遠停不下來
+// （poller 本身只會新增 job，從不移除）。
+// ponytail: 這裡在持有 cs.mu 期間查了一次 DB，等於把鎖的臨界區擴大到含一次 DB round trip；
+// 但只有「目前不在 taskCronEntryIDs 裡」的任務才會走到這個查詢，數量很少，可接受。
+func (cs *CronScheduler) registerIfStillEnabled(taskID string) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	if _, exists := cs.taskCronEntryIDs[taskID]; exists {
+		return
+	}
+
+	var fresh models.Task
+	err := cs.db.Where("id = ? AND status = ?", taskID, models.STATUS_ENABLED).Preload("Group").First(&fresh).Error
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			cs.Log.Error(err, "task ID: "+taskID+", poller 重新查詢任務狀態失敗")
+		}
+		return
+	}
+
+	if err := registerTaskJobLocked(cs, &fresh); err != nil {
+		cs.Log.Error(err, "task ID: "+taskID+", RegisterTaskJob err")
+	}
+}
+
 // NextRunAt 回傳任務下次執行時間；任務未掛上 cron job（未啟用、或註冊失敗）時 ok 為 false
 func NextRunAt(cs *CronScheduler, taskID string) (time.Time, bool) {
 	cs.mu.Lock()
@@ -98,10 +128,9 @@ func (cs *CronScheduler) StartScheduler() {
 			return
 		}
 		for _, task := range tasks {
+			// hasJob 只是快速篩選，真正的「是否仍 enabled」要在鎖內重查，見 registerIfStillEnabled 註解
 			if !cs.hasJob(task.ID) {
-				if err := RegisterTaskJob(cs, task.ID, &task); err != nil {
-					cs.Log.Error(err, "task ID: "+task.ID+", RegisterTaskJob err")
-				}
+				cs.registerIfStillEnabled(task.ID)
 			}
 		}
 	})

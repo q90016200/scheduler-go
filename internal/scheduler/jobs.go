@@ -29,6 +29,11 @@ func RegisterTaskJob(cs *CronScheduler, id string, task *models.Task) error {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
+	return registerTaskJobLocked(cs, task)
+}
+
+// registerTaskJobLocked 實際註冊 cron job，呼叫端必須已持有 cs.mu。
+func registerTaskJobLocked(cs *CronScheduler, task *models.Task) error {
 	var entryID cron.EntryID
 	var err error
 
@@ -45,6 +50,12 @@ func RegisterTaskJob(cs *CronScheduler, id string, task *models.Task) error {
 	if err != nil {
 		cs.Log.Error(err, fmt.Sprintf("failed to register cron job: %+v", task))
 		return err
+	}
+
+	// 若該 task 已有舊的 cron entry（例如併發 enable/update，或 CreateTask 與每分鐘 poller 競速），
+	// 註冊新 entry 後要把舊的移除，否則舊 entry 永遠留在 cron 裡、同一 task 變成兩個排程同時觸發
+	if oldEntryID, exists := cs.taskCronEntryIDs[task.ID]; exists {
+		cs.Cron.Remove(oldEntryID)
 	}
 
 	// 保存任務 ID
@@ -268,6 +279,9 @@ func doHTTPAttempt(ctx context.Context, client *resty.Client, task *models.Task,
 	}
 	if resp.StatusCode() >= 500 {
 		return models.EXEC_STATUS_FAILED, string(resp.Body()), fmt.Sprintf("http %d", resp.StatusCode()), true
+	}
+	if resp.StatusCode() >= 400 {
+		return models.EXEC_STATUS_FAILED, string(resp.Body()), fmt.Sprintf("http %d", resp.StatusCode()), false
 	}
 	return models.EXEC_STATUS_SUCCESS, string(resp.Body()), "", false
 }

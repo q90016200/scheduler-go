@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { cancelRunTask, runTask } from '../api/tasks'
 import { listExecutionLogs } from '../api/executionLogs'
@@ -17,12 +17,14 @@ const cancelling = ref(false)
 const finished = ref(false)
 const timedOut = ref(false)
 const logs = ref<ExecutionLog[]>([])
+const completedCount = computed(() => logs.value.filter((l) => l.is_final_attempt).length)
 
 const form = reactive({ repeat: 1, intervalMs: 1000 })
 
 let pollTimer: ReturnType<typeof setInterval> | undefined
 let baselineLogId = ''
 let deadline = 0
+let unmounted = false
 
 function stopPolling() {
   if (pollTimer) {
@@ -48,23 +50,29 @@ watch(
   },
 )
 
-onBeforeUnmount(stopPolling)
+onBeforeUnmount(() => {
+  unmounted = true
+  stopPolling()
+})
 
 async function poll() {
   if (!props.task) return
+  const retryCount = props.task.retry_count ?? 0
   try {
     const result = await listExecutionLogs({
       task_id: props.task.id,
       sort_field: 'started_at',
       sort_order: 'desc',
-      limit: form.repeat + 5,
+      limit: form.repeat * (1 + retryCount) + 5,
     })
-    logs.value = result.logs.filter((l) => l.id > baselineLogId).reverse()
+    logs.value = result.logs
+      .filter((l) => l.id > baselineLogId && l.source === 'manual')
+      .reverse()
   } catch {
     // 輪詢失敗不中斷，下一輪再試
   }
 
-  if (logs.value.length >= form.repeat) {
+  if (completedCount.value >= form.repeat) {
     finished.value = true
     stopPolling()
     return
@@ -85,16 +93,23 @@ async function handleSubmit() {
       sort_order: 'desc',
       limit: 1,
     })
+    if (unmounted) return
     baselineLogId = baseline.logs[0]?.id ?? ''
 
     await runTask(props.task.id, { repeat: form.repeat, interval_ms: form.intervalMs })
+    if (unmounted) return
 
     stage.value = 'progress'
     logs.value = []
     finished.value = false
     timedOut.value = false
-    deadline = Date.now() + form.repeat * (form.intervalMs + 12000) + 5000
+    const timeoutSeconds = props.task.timeout_seconds || 10
+    const retryCount = props.task.retry_count ?? 0
+    const retryDelayMs = props.task.retry_delay_ms ?? 0
+    const perCallWorstMs = timeoutSeconds * 1000 * (1 + retryCount) + retryDelayMs * retryCount + 2000
+    deadline = Date.now() + form.repeat * (form.intervalMs + perCallWorstMs) + 5000
     await poll()
+    if (unmounted) return
     pollTimer = setInterval(poll, 1000)
   } catch (err) {
     ElMessage.error((err as Error).message || '觸發執行失敗')
@@ -141,8 +156,8 @@ function handleClose() {
     </template>
 
     <template v-else>
-      <el-progress :percentage="Math.min(100, Math.round((logs.length / form.repeat) * 100))" :status="finished ? 'success' : undefined" />
-      <p style="margin: 12px 0">已收到 {{ logs.length }} / {{ form.repeat }} 筆執行結果</p>
+      <el-progress :percentage="Math.min(100, Math.round((completedCount / form.repeat) * 100))" :status="finished ? 'success' : undefined" />
+      <p style="margin: 12px 0">已收到 {{ completedCount }} / {{ form.repeat }} 筆執行結果</p>
       <p v-if="timedOut && !finished" style="color: var(--el-color-warning)">等待逾時，請至執行紀錄頁查看完整結果。</p>
       <ExecutionLogTable :logs="logs" :show-task="false" />
       <p style="color: var(--el-text-color-secondary); font-size: 13px; margin-top: 12px">關閉這個視窗不會停止尚未執行的次數，需按下方「取消批次」。</p>
