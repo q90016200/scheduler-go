@@ -99,7 +99,7 @@ scheduler-tool/
    go test ./...
    ```
 
-   涵蓋 `internal/scheduler`（cron 註冊/錯誤路徑、HTTP 4xx 不重試／5xx 重試的分類、重新註冊同一任務會取代舊 cron entry 而非留下重複排程，以及立即執行的重複次數、併發批次拒絕、取消）與 `internal/ssrf`（SSRF 連線防護）。排程相關程式碼可另外用 `go test -race ./internal/scheduler/...` 檢查併發安全。
+   涵蓋 `internal/scheduler`（cron 註冊與排程、HTTP 成功/重試判定、立即執行）、`internal/ssrf`（SSRF 連線防護）與 `pkg/utils`（驗證器）。排程相關程式碼可另外用 `go test -race ./internal/scheduler/...` 檢查併發安全。
 
 ## Docker 部署
 
