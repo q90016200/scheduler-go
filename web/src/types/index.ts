@@ -57,6 +57,7 @@ export interface Task {
   retry_delay_ms: number
   timeout_seconds: number
   headers: string
+  success_status_codes: string
   notify_fail_threshold: number
   notify_telegram: boolean
   notify_slack: boolean
@@ -80,6 +81,7 @@ export type TaskWriteDTO = {
   retry_delay_ms: number
   timeout_seconds: number
   headers: string
+  success_status_codes: string
   notify_fail_threshold: number
   notify_telegram: boolean
   notify_slack: boolean

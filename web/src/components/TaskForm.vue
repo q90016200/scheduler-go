@@ -33,6 +33,7 @@ const form = reactive<TaskWriteDTO>({
   retry_delay_ms: props.initial?.retry_delay_ms ?? 0,
   timeout_seconds: props.initial?.timeout_seconds ?? 10,
   headers: props.initial?.headers ?? '{}',
+  success_status_codes: props.initial?.success_status_codes ?? '',
   notify_fail_threshold: props.initial?.notify_fail_threshold ?? 0,
   notify_telegram: props.initial?.notify_telegram ?? false,
   notify_slack: props.initial?.notify_slack ?? false,
@@ -163,6 +164,10 @@ defineExpose({ handleSubmit })
         <el-button :icon="Delete" circle @click="removeHeaderRow(index)" />
       </div>
       <el-button :icon="Plus" @click="addHeaderRow">新增 Header</el-button>
+    </el-form-item>
+    <el-form-item v-if="form.type === 'http'" label="成功狀態碼" prop="success_status_codes">
+      <el-input v-model="form.success_status_codes" placeholder="如 200,201,2xx" style="width: 260px" />
+      <span class="hint">留空則 HTTP 400 以下皆視為成功</span>
     </el-form-item>
     <el-form-item label="失敗重試">
       <el-input-number v-model="form.retry_count" :min="0" :max="5" />

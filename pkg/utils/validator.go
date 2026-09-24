@@ -30,6 +30,34 @@ func init() {
 	MyValidator.RegisterValidation("length", checkLength)
 	MyValidator.RegisterValidation("prec", checkPrecision)
 	MyValidator.RegisterValidation("cron", checkCronExpr)
+	MyValidator.RegisterValidation("status_codes", checkStatusCodes)
+}
+
+// checkStatusCodes 驗證成功狀態碼設定格式；用永遠不會命中的 0 呼叫 MatchStatusCode，逼它把每一段都解析過一遍
+func checkStatusCodes(fl validator.FieldLevel) bool {
+	_, err := MatchStatusCode(fl.Field().String(), 0)
+	return err == nil
+}
+
+// MatchStatusCode 判斷 code 是否符合 spec；spec 為逗號分隔的三位數狀態碼（100-599）或類別（1xx-5xx），如 "200,201,3xx"
+func MatchStatusCode(spec string, code int) (bool, error) {
+	for _, part := range strings.Split(spec, ",") {
+		p := strings.ToLower(strings.TrimSpace(part))
+		if len(p) == 3 && p[1:] == "xx" && p[0] >= '1' && p[0] <= '5' {
+			if code/100 == int(p[0]-'0') {
+				return true, nil
+			}
+			continue
+		}
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 100 || n > 599 {
+			return false, fmt.Errorf("invalid status code %q", part)
+		}
+		if n == code {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // checkCronExpr 驗證欄位是否為合法的標準 cron 表達式（與 scheduler 實際使用的解析器一致）

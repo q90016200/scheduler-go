@@ -250,7 +250,7 @@ func updateFailureStreakAndNotify(db *gorm.DB, log *logger.LogrusAdapter, task *
 }
 
 // doHTTPAttempt 單次 HTTP 呼叫：網路錯誤／timeout／5xx 視為可重試；4xx 與不支援的 method 視為不可重試
-// （重試也不會有不同結果）。ctx 帶著 per-task 逾時，取代舊版寫死在 client 上的 10 秒。
+// （重試也不會有不同結果）。task.SuccessStatusCodes 有值時改以它判定成功。ctx 帶著 per-task 逾時，取代舊版寫死在 client 上的 10 秒。
 func doHTTPAttempt(ctx context.Context, client *resty.Client, task *models.Task, headers map[string]string) (status, output, errMsg string, retryable bool) {
 	req := client.R().SetContext(ctx)
 	if len(headers) > 0 {
@@ -276,6 +276,14 @@ func doHTTPAttempt(ctx context.Context, client *resty.Client, task *models.Task,
 
 	if err != nil {
 		return models.EXEC_STATUS_FAILED, "", err.Error(), true
+	}
+	// 任務有自訂成功狀態碼時以它為準；不符合時仍沿用 5xx 可重試、其餘不可重試的分類
+	if task.SuccessStatusCodes != "" {
+		code := resp.StatusCode()
+		if ok, _ := utils.MatchStatusCode(task.SuccessStatusCodes, code); ok {
+			return models.EXEC_STATUS_SUCCESS, string(resp.Body()), "", false
+		}
+		return models.EXEC_STATUS_FAILED, string(resp.Body()), fmt.Sprintf("http %d, expected %s", code, task.SuccessStatusCodes), code >= 500
 	}
 	if resp.StatusCode() >= 500 {
 		return models.EXEC_STATUS_FAILED, string(resp.Body()), fmt.Sprintf("http %d", resp.StatusCode()), true

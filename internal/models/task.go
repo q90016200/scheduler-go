@@ -26,6 +26,7 @@ type Task struct {
 	RetryDelayMs        int    `json:"retry_delay_ms" gorm:"column:retry_delay_ms;default:0"`                  // 每次重試間隔，固定值不做指數退避 (0-30000ms)
 	TimeoutSeconds      int    `json:"timeout_seconds" gorm:"column:timeout_seconds;default:10"`               // http/rpc 單次呼叫逾時秒數 (1-120)
 	Headers             string `json:"headers" gorm:"column:headers;default:'{}'"`                             // 自由 JSON map，如 {"Authorization":"Bearer xxx"}；跟 Payload/Endpoint 同信任模型，明文存
+	SuccessStatusCodes  string `json:"success_status_codes" gorm:"column:success_status_codes;size:100;default:''"` // 只用於 http 任務；如 "200,201,2xx"，空字串沿用預設（<400 成功）
 	NotifyFailThreshold int    `json:"notify_fail_threshold" gorm:"column:notify_fail_threshold;default:0"`    // 連續失敗達此值才通知一次，之後靜音直到成功一次重新計數；0 表示不啟用
 	NotifyTelegram      bool   `json:"notify_telegram" gorm:"column:notify_telegram;default:false"`
 	NotifySlack         bool   `json:"notify_slack" gorm:"column:notify_slack;default:false"`
@@ -62,6 +63,7 @@ type CreateTaskReq struct {
 	RetryDelayMs        int     `json:"retry_delay_ms" validate:"omitempty,min=0,max=30000"`
 	TimeoutSeconds      int     `json:"timeout_seconds" validate:"omitempty,min=1,max=120"`
 	Headers             string  `json:"headers" validate:"omitempty,json"`
+	SuccessStatusCodes  string  `json:"success_status_codes" validate:"omitempty,max=100,status_codes"`
 	NotifyFailThreshold int     `json:"notify_fail_threshold" validate:"omitempty,min=1,max=20"`
 	NotifyTelegram      bool    `json:"notify_telegram"`
 	NotifySlack         bool    `json:"notify_slack"`
@@ -83,6 +85,7 @@ type UpdateTaskReq struct {
 	RetryDelayMs        int     `json:"retry_delay_ms" validate:"omitempty,min=0,max=30000"`
 	TimeoutSeconds      int     `json:"timeout_seconds" validate:"omitempty,min=1,max=120"`
 	Headers             string  `json:"headers" validate:"omitempty,json"`
+	SuccessStatusCodes  string  `json:"success_status_codes" validate:"omitempty,max=100,status_codes"`
 	NotifyFailThreshold int     `json:"notify_fail_threshold" validate:"omitempty,min=1,max=20"`
 	NotifyTelegram      bool    `json:"notify_telegram"`
 	NotifySlack         bool    `json:"notify_slack"`

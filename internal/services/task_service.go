@@ -119,6 +119,7 @@ func (s *TaskService) CreateTask(input models.CreateTaskReq) (*models.Task, erro
 		RetryDelayMs:        input.RetryDelayMs,
 		TimeoutSeconds:      input.TimeoutSeconds,
 		Headers:             input.Headers,
+		SuccessStatusCodes:  input.SuccessStatusCodes,
 		NotifyFailThreshold: input.NotifyFailThreshold,
 		NotifyTelegram:      input.NotifyTelegram,
 		NotifySlack:         input.NotifySlack,
@@ -152,7 +153,7 @@ func (s *TaskService) CreateTask(input models.CreateTaskReq) (*models.Task, erro
 // taskUpdatableColumns UpdateTask 允許更新的欄位，排除 created_at/created_by
 var taskUpdatableColumns = []string{
 	"group_id", "name", "description", "schedule", "type", "endpoint", "method", "payload", "status", "updated_by",
-	"retry_count", "retry_delay_ms", "timeout_seconds", "headers",
+	"retry_count", "retry_delay_ms", "timeout_seconds", "headers", "success_status_codes",
 	"notify_fail_threshold", "notify_telegram", "notify_slack", "notify_email",
 }
 
@@ -173,6 +174,7 @@ func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models
 		RetryDelayMs:        input.RetryDelayMs,
 		TimeoutSeconds:      input.TimeoutSeconds,
 		Headers:             input.Headers,
+		SuccessStatusCodes:  input.SuccessStatusCodes,
 		NotifyFailThreshold: input.NotifyFailThreshold,
 		NotifyTelegram:      input.NotifyTelegram,
 		NotifySlack:         input.NotifySlack,

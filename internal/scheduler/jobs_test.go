@@ -196,3 +196,29 @@ func TestRegisterTaskJobReplacesOldEntry(t *testing.T) {
 		t.Fatalf("expected exactly 1 map entry after re-registering the same task, got %d", got)
 	}
 }
+
+func TestDoHTTPAttemptSuccessStatusCodes(t *testing.T) {
+	cases := []struct {
+		spec          string
+		code          int
+		wantStatus    string
+		wantRetryable bool
+	}{
+		{"", 202, models.EXEC_STATUS_SUCCESS, false},
+		{"200", 202, models.EXEC_STATUS_FAILED, false},
+		{"200,2xx", 202, models.EXEC_STATUS_SUCCESS, false},
+		{"404", 404, models.EXEC_STATUS_SUCCESS, false},
+		{"200", 503, models.EXEC_STATUS_FAILED, true},
+	}
+	for _, c := range cases {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(c.code)
+		}))
+		task := &models.Task{Method: "GET", Endpoint: srv.URL, SuccessStatusCodes: c.spec}
+		status, _, _, retryable := doHTTPAttempt(context.Background(), resty.New(), task, nil)
+		srv.Close()
+		if status != c.wantStatus || retryable != c.wantRetryable {
+			t.Errorf("spec=%q code=%d: got (%s, %v), want (%s, %v)", c.spec, c.code, status, retryable, c.wantStatus, c.wantRetryable)
+		}
+	}
+}

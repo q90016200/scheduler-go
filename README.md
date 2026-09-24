@@ -159,6 +159,7 @@ docker run -d -p 8080:8080 --env-file .env schedule-go   # 啟動
   - `retry_count`（0-5，失敗時額外重試次數）、`retry_delay_ms`（0-30000，每次重試間隔毫秒，固定值不做指數退避）
   - `timeout_seconds`（1-120，單次 HTTP/RPC 呼叫逾時秒數，預設 10）
   - `headers`（自由 JSON 字串，如 `{"Authorization":"Bearer xxx"}`；http 任務轉成 request headers、rpc 任務轉成 gRPC metadata；明文儲存，跟 `payload`/`endpoint` 同信任模型）
+  - `success_status_codes`（僅 http 任務；逗號分隔的狀態碼或類別，如 `200,201,2xx`，最多 100 字元。留空沿用預設：HTTP 400 以下視為成功。有設定時，符合者即成功（可把 `404` 之類設為成功）；不符合者失敗，其中 5xx 仍可重試、其餘不重試）
   - `notify_fail_threshold`（1-20，連續失敗達此次數才發一次失敗通知，之後靜音直到成功一次重新累積；0 表示不啟用通知）
   - `notify_telegram`/`notify_slack`/`notify_email`（布林，個別勾選要不要收該管道的通知；管道本身要在 `.env` 設定好才會真的送出）
 
