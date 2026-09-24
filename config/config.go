@@ -3,6 +3,8 @@ package config
 import (
 	"log"
 	"strings"
+	"time"
+	_ "time/tzdata" // 內嵌時區資料庫，容器映像沒裝 tzdata 時 LoadLocation 仍可用
 
 	"github.com/spf13/viper"
 )
@@ -67,6 +69,7 @@ func LoadConfig() {
 	viper.SetDefault("APP_ENV", "development")
 	viper.SetDefault("TOKEN_EXPIRY", 604800)
 	viper.SetDefault("EXECUTION_LOG_RETENTION_DAYS", 120)
+	viper.SetDefault("TIMEZONE", "Asia/Taipei")
 	viper.SetDefault("POSTGRES_SSLMODE", "disable")
 	viper.SetDefault("POSTGRES_MAX_OPEN_CONNS", 25)
 	viper.SetDefault("POSTGRES_MAX_IDLE_CONNS", 5)
@@ -81,6 +84,14 @@ func LoadConfig() {
 	if executionLogRetentionDays <= 0 {
 		executionLogRetentionDays = 120
 	}
+
+	location, err := time.LoadLocation(viper.GetString("TIMEZONE"))
+	if err != nil {
+		log.Fatalf("TIMEZONE 無效: %v", err)
+	}
+	// TIMEZONE 直接設成 time.Local：cron 排程（robfig/cron 預設用 time.Local）、DB 連線 TimeZone、日誌時間戳共用，
+	// 不受主機/容器本機時區影響
+	time.Local = location
 
 	AppConfig = Config{
 		AppEnv:                    viper.GetString("APP_ENV"),

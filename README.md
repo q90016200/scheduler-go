@@ -125,6 +125,7 @@ docker run -d -p 8080:8080 --env-file .env schedule-go   # 啟動
 | `TOKEN_EXPIRY` | JWT/cookie 有效秒數 | - |
 | `EXECUTION_LOG_RETENTION_DAYS` | 任務執行紀錄保留天數，超過會被每日排程清除 | `120` |
 | `SSRF_ALLOW_PRIVATE_TARGETS` | 設 `true` 時關閉任務執行的 SSRF 防護（連 loopback/metadata 位址都放行），僅供確實需要打 loopback 的情境使用 | `false` |
+| `TIMEZONE` | 應用時區（IANA 名稱）。cron 排程、資料庫連線 `TimeZone`、日誌時間戳（`time.Local`）都以此為準，不受主機/容器本機時區影響；無效值會在啟動時 `log.Fatalf`。單一任務可在排程前加 `CRON_TZ=` 覆寫，如 `CRON_TZ=Asia/Tokyo 0 9 * * *` | `Asia/Taipei` |
 | `LOG_LEVEL` | logrus 最低輸出等級（`debug`/`info`/`warn`/`error`...） | 開發環境 `debug`，其餘 `info` |
 | `POSTGRES_*` | PostgreSQL 連線資訊。任一項缺少同樣會在啟動時 `log.Fatalf` | - |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 失敗通知的 Telegram 管道；任一項留空視為停用 | - |

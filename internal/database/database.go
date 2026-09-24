@@ -18,13 +18,14 @@ func InitializeDB() (*gorm.DB, error) {
 
 	// 資料庫連接字串
 	dsn := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=Asia/Taipei",
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=%s",
 		pg.Host,
 		pg.Port,
 		pg.Username,
 		pg.Password,
 		pg.Database,
 		pg.SSLMode,
+		time.Local.String(),
 	)
 
 	log.Printf("Connecting to database %s:%s/%s", pg.Host, pg.Port, pg.Database)
