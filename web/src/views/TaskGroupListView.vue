@@ -56,24 +56,25 @@ function handleSortChange({ prop, order }: { prop: string; order: 'ascending' | 
 onMounted(load)
 
 async function handleStatusChange(group: TaskGroup, status: Status) {
-  if (status === 'disabled') {
-    const enabled = await listTasks({ group_id: group.id, status: 'enabled', limit: 1 })
-    if (enabled.total > 0) {
-      try {
-        await ElMessageBox.confirm(
-          `將停用群組「${group.name}」下 ${enabled.total} 個啟用中任務，確定停用？`,
-          '停用群組',
-          { type: 'warning' },
-        )
-      } catch (err) {
-        if (err === 'cancel' || err === 'close') return
-        throw err
-      }
-    }
-  }
-
+  if (statusUpdatingIds.value.has(group.id)) return
   statusUpdatingIds.value.add(group.id)
   try {
+    if (status === 'disabled') {
+      const enabled = await listTasks({ group_id: group.id, status: 'enabled', limit: 1 })
+      if (enabled.total > 0) {
+        try {
+          await ElMessageBox.confirm(
+            `將停用群組「${group.name}」下 ${enabled.total} 個啟用中任務，確定停用？`,
+            '停用群組',
+            { type: 'warning' },
+          )
+        } catch (err) {
+          if (err === 'cancel' || err === 'close') return
+          throw err
+        }
+      }
+    }
+
     await updateTaskGroup(group.id, { name: group.name, description: group.description, status, user_id: auth.user?.id ?? '' })
     ElMessage.success('狀態已更新')
     await load()
