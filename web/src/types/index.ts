@@ -1,7 +1,9 @@
+// 驗證失敗為 {field, tag, param}；JSON 本身解不開（型別不符等）時後端只帶 {error}
 export interface ValidationFieldError {
-  field: string
-  tag: string
-  param: string
+  field?: string
+  tag?: string
+  param?: string
+  error?: string
 }
 
 export interface ApiEnvelope<T> {

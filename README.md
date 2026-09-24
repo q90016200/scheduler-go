@@ -136,6 +136,8 @@ docker run -d -p 8080:8080 --env-file .env schedule-go   # 啟動
 
 > **登入/註冊目前暫時停用**：`JWTAuthMiddleware` 未掛載在任何路由上，前端也拿掉了未登入導向 `/login` 的守衛，所有端點與頁面皆可直接使用，不需登入。以下「需登入」標註為停用前的原始設計，之後要恢復可參考 `internal/router/router.go`。
 
+**錯誤回應格式**：所有回應皆為 `{code, message, data, error, trace}`。驗證失敗（400）時 `error` 為 `[{field, tag, param}]` 陣列，`field` 使用 JSON 欄位名（如 `endpoint`、`retry_count`），前端據此翻成中文欄位與錯誤訊息（`web/src/api/client.ts`）。
+
 **健康檢查**：`GET /healthz`（在 `/api` 之外，不掛 tracing，也不寫進 gin access log）。資料庫 ping 成功回 200 `{"status":"ok"}`，失敗回 503，供容器/負載平衡器探測。
 
 **Auth**（`/api/auth`）：`POST /register`、`POST /login`（設定 `auth_token` HttpOnly cookie；帳號 `status` 為 `disabled` 時登入會被拒絕）、`POST /logout`、`GET /me`（取得目前使用者，需帶有效 cookie 才有意義）。
@@ -183,6 +185,7 @@ docker run -d -p 8080:8080 --env-file .env schedule-go   # 啟動
 - 終端機（stdout）輸出彩色、人類可讀的格式，兩者格式不同但內容一致（含 `trace_id`、錯誤內容等欄位）。
 - 每個 API 請求都會被指派一個 `trace_id`：若請求帶有 `X-Request-ID` header 就沿用，否則自動產生；同一個值會出現在 API 回應的 `trace` 欄位、回應的 `X-Request-ID` header，以及該請求相關的所有 log 行中，方便串接排查。
 - 輸出等級由 `LOG_LEVEL` 環境變數控制（見上方環境變數表）。
+- 5xx 錯誤後端不回傳內部錯誤細節（只寫進日誌），前端的錯誤提示會附上 `（trace: xxx）`，回報問題時提供此值即可用上面的 `jq` 指令查到對應日誌。
 
 ## 前端開發
 

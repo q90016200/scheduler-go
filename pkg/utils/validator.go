@@ -5,6 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"github.com/robfig/cron/v3"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -16,6 +17,14 @@ var (
 
 func init() {
 	MyValidator = validator.New()
+	// 錯誤回報用 json 欄位名（endpoint）而非 Go 欄位名（EndPoint），前端才能直接對應表單欄位
+	MyValidator.RegisterTagNameFunc(func(f reflect.StructField) string {
+		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+		if name == "" || name == "-" {
+			return f.Name
+		}
+		return name
+	})
 	// 自定义验证方法
 	MyValidator.RegisterValidation("alphanumLength", checkAlphanumLength)
 	MyValidator.RegisterValidation("length", checkLength)
@@ -43,15 +52,15 @@ func ValidateTaskMethod(sl validator.StructLevel) {
 		switch method {
 		case "GET", "POST", "PUT", "DELETE", "PATCH":
 		default:
-			sl.ReportError(methodField.Interface(), "Method", "Method", "oneof", "GET POST PUT DELETE PATCH")
+			sl.ReportError(methodField.Interface(), "method", "Method", "oneof", "GET POST PUT DELETE PATCH")
 		}
 	case "rpc":
 		if method == "" {
-			sl.ReportError(methodField.Interface(), "Method", "Method", "required", "")
+			sl.ReportError(methodField.Interface(), "method", "Method", "required", "")
 			return
 		}
 		if _, _, err := SplitRpcMethod(method); err != nil {
-			sl.ReportError(methodField.Interface(), "Method", "Method", "rpc_method_format", "")
+			sl.ReportError(methodField.Interface(), "method", "Method", "rpc_method_format", "")
 		}
 	}
 }
