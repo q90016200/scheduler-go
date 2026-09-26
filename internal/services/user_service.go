@@ -29,9 +29,6 @@ func (s *UserService) ListUsers(name string, limit, offset int) ([]models.User, 
 	}
 
 	err := query.Limit(limit).Offset(offset).Find(&users).Error
-	for i := range users {
-		users[i].Password = ""
-	}
 	return users, total, err
 }
 
@@ -40,7 +37,6 @@ func (s *UserService) GetUser(id string) (*models.User, error) {
 	if err := s.db.First(&user, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
-	user.Password = ""
 	return &user, nil
 }
 
@@ -65,7 +61,6 @@ func (s *UserService) CreateUser(input models.CreateUserReq) (*models.User, erro
 		return nil, err
 	}
 
-	user.Password = ""
 	return user, nil
 }
 
@@ -92,7 +87,6 @@ func (s *UserService) UpdateUser(id string, input models.UpdateUserReq) (*models
 		return nil, err
 	}
 
-	user.Password = ""
 	return &user, nil
 }
 

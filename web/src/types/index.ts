@@ -61,7 +61,6 @@ export interface Task {
   notify_fail_threshold: number
   notify_telegram: boolean
   notify_slack: boolean
-  notify_email: boolean
   consecutive_failures: number
   next_run_at?: number | null
 }
@@ -85,7 +84,6 @@ export type TaskWriteDTO = {
   notify_fail_threshold: number
   notify_telegram: boolean
   notify_slack: boolean
-  notify_email: boolean
 }
 
 export interface TaskStats {
@@ -118,43 +116,17 @@ export interface ExecutionLog {
   is_final_attempt: boolean
 }
 
-export interface ListLogsResult {
-  logs: ExecutionLog[]
-  total: number
-  limit: number
-  offset: number
-}
+export type Paged<K extends string, T> = Record<K, T[]> & { total: number; limit: number; offset: number }
 
-export interface ListTasksResult {
-  tasks: Task[]
-  total: number
-  limit: number
-  offset: number
-}
-
-export interface ListTaskGroupsResult {
-  groups: TaskGroup[]
-  total: number
-  limit: number
-  offset: number
-}
-
-export interface DeactivatedTaskRef {
-  id: string
-  name: string
-}
+export type ListLogsResult = Paged<'logs', ExecutionLog>
+export type ListTasksResult = Paged<'tasks', Task>
+export type ListTaskGroupsResult = Paged<'groups', TaskGroup>
 
 export interface DeleteTaskGroupResult {
-  deactivated_tasks: DeactivatedTaskRef[]
+  deactivated_tasks: { id: string; name: string }[]
 }
 
 export interface RunTaskParams {
-  repeat: number
-  interval_ms: number
-}
-
-export interface RunTaskResult {
-  task_id: string
   repeat: number
   interval_ms: number
 }
@@ -165,23 +137,14 @@ export type UserWriteDTO = {
   status?: Status
 }
 
-export interface ListUsersResult {
-  users: User[]
-  total: number
-  limit: number
-  offset: number
-}
-
-export interface DashboardFailingTask {
-  task_id: string
-  task_name: string
-  fail_count: number
-}
+export type ListUsersResult = Paged<'users', User>
 
 export interface DashboardTaskRef {
   task_id: string
   task_name: string
 }
+
+export type DashboardFailingTask = DashboardTaskRef & { fail_count: number }
 
 export interface DashboardStats {
   total_tasks_enabled: number
@@ -195,5 +158,4 @@ export interface DashboardStats {
 export interface NotifyConfig {
   telegram_configured: boolean
   slack_configured: boolean
-  email_configured: boolean
 }

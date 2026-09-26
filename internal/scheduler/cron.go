@@ -31,7 +31,6 @@ type CronScheduler struct {
 }
 
 func NewCronScheduler(db *gorm.DB) *CronScheduler {
-	//log := logger.Init("../../logs/cron.log")
 	log := logger.Log
 	cronLogger := &logger.LogrusAdapter{Logger: log}
 	baseCtx, baseCancel := context.WithCancel(context.Background())
@@ -52,14 +51,6 @@ func NewCronScheduler(db *gorm.DB) *CronScheduler {
 func newSSRFGuardedRestyClient() *resty.Client {
 	transport := &http.Transport{DialContext: ssrf.SafeDialContext}
 	return resty.New().SetTimeout(10 * time.Second).SetTransport(transport)
-}
-
-// hasJob 回傳 taskID 是否已註冊 cron job，持鎖以避免與 Register/UnregisterTaskJob 的併發存取
-func (cs *CronScheduler) hasJob(taskID string) bool {
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
-	_, exists := cs.taskCronEntryIDs[taskID]
-	return exists
 }
 
 // jobCount 持鎖回傳目前已註冊的 cron job 數量
@@ -128,10 +119,8 @@ func (cs *CronScheduler) StartScheduler() {
 			return
 		}
 		for _, task := range tasks {
-			// hasJob 只是快速篩選，真正的「是否仍 enabled」要在鎖內重查，見 registerIfStillEnabled 註解
-			if !cs.hasJob(task.ID) {
-				cs.registerIfStillEnabled(task.ID)
-			}
+			// registerIfStillEnabled 本身在鎖內會先檢查是否已註冊過，見該函式註解
+			cs.registerIfStillEnabled(task.ID)
 		}
 	})
 	if err != nil {
@@ -157,11 +146,7 @@ func (cs *CronScheduler) StartScheduler() {
 
 // StopCronScheduler 停止排程器，並取消所有進行中的「立即執行」重複批次（已發出的請求仍會跑完）
 func (cs *CronScheduler) StopCronScheduler() {
-	if cs.Cron != nil {
-		cs.Cron.Stop()
-		cs.Log.Info("排程器已停止")
-	}
-	if cs.baseCancel != nil {
-		cs.baseCancel()
-	}
+	cs.Cron.Stop()
+	cs.Log.Info("排程器已停止")
+	cs.baseCancel()
 }

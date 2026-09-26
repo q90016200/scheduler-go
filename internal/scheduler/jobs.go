@@ -17,7 +17,6 @@ import (
 	"github.com/q90016200/scheduler-go/internal/ssrf"
 	"github.com/q90016200/scheduler-go/pkg/logger"
 	"github.com/q90016200/scheduler-go/pkg/utils"
-	"github.com/robfig/cron/v3"
 	"github.com/rs/xid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -25,7 +24,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func RegisterTaskJob(cs *CronScheduler, id string, task *models.Task) error {
+func RegisterTaskJob(cs *CronScheduler, task *models.Task) error {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
@@ -34,19 +33,13 @@ func RegisterTaskJob(cs *CronScheduler, id string, task *models.Task) error {
 
 // registerTaskJobLocked 實際註冊 cron job，呼叫端必須已持有 cs.mu。
 func registerTaskJobLocked(cs *CronScheduler, task *models.Task) error {
-	var entryID cron.EntryID
-	var err error
-
-	switch task.Type {
-	case "http":
-		runOnce := RunRequestHttp(cs.Log, cs.db, cs.restyClient, task, models.SOURCE_CRON)
-		entryID, err = cs.Cron.AddFunc(task.Schedule, func() { runOnce(cs.baseCtx) })
-	case "rpc":
-		runOnce := RunRequestRpc(cs.Log, cs.db, task, models.SOURCE_CRON)
-		entryID, err = cs.Cron.AddFunc(task.Schedule, func() { runOnce(cs.baseCtx) })
-	default:
-		err = fmt.Errorf("unknown task type: %s", task.Type)
+	runOnce, err := jobFor(cs, task, models.SOURCE_CRON)
+	if err != nil {
+		cs.Log.Error(err, fmt.Sprintf("failed to register cron job: %+v", task))
+		return err
 	}
+
+	entryID, err := cs.Cron.AddFunc(task.Schedule, func() { runOnce(cs.baseCtx) })
 	if err != nil {
 		cs.Log.Error(err, fmt.Sprintf("failed to register cron job: %+v", task))
 		return err
@@ -140,7 +133,7 @@ func CancelTaskRun(cs *CronScheduler, taskID string) error {
 	return nil
 }
 
-func UnregisterTaskJob(cs *CronScheduler, id string) error {
+func UnregisterTaskJob(cs *CronScheduler, id string) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
@@ -150,8 +143,6 @@ func UnregisterTaskJob(cs *CronScheduler, id string) error {
 		delete(cs.taskCronEntryIDs, id)
 		cs.Log.Info(fmt.Sprintf("已移除 task %s 的 cron job", id))
 	}
-
-	return nil
 }
 
 // taskTimeoutSeconds 沒設定（含舊資料遷移前的 0 值）時沿用原本寫死的 10 秒
@@ -398,18 +389,12 @@ func logExecution(db *gorm.DB, log *logger.LogrusAdapter, taskID string, started
 // maxLogOutputLen 寫進 log 的回應內容長度上限，避免大回應灌爆 log 檔
 const maxLogOutputLen = 2000
 
-// truncate 將字串截斷至最多 n 個位元組
-func truncate(s string, n int) string {
-	if len(s) > n {
-		return s[:n]
-	}
-	return s
-}
-
 // toJSONColumn 確保寫進 output（Postgres jsonb 欄位）的內容一定是合法 JSON：
 // http 任務的回應本來就可能是 JSON，直接原樣存；不是合法 JSON（例如純文字/HTML）就包一層 {"raw": "..."}。
 func toJSONColumn(output string) string {
-	output = truncate(output, maxLogOutputLen)
+	if len(output) > maxLogOutputLen {
+		output = output[:maxLogOutputLen]
+	}
 	if output == "" {
 		return "{}"
 	}

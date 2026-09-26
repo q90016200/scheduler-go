@@ -10,9 +10,7 @@ import (
 	"github.com/q90016200/scheduler-go/config"
 )
 
-type slackChannel struct{}
-
-func (slackChannel) Send(ctx context.Context, msg Message) error {
+func sendSlack(ctx context.Context, msg Message) error {
 	webhookURL := config.AppConfig.NotifyConfig.SlackWebhookURL
 	if webhookURL == "" {
 		return nil
@@ -30,13 +28,5 @@ func (slackChannel) Send(ctx context.Context, msg Message) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		return fmt.Errorf("slack webhook 回應非 2xx: %d", resp.StatusCode)
-	}
-	return nil
+	return do(req, "slack webhook")
 }

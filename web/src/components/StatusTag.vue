@@ -3,22 +3,15 @@ import { computed } from 'vue'
 
 const props = defineProps<{ status: string }>()
 
-const typeMap: Record<string, string> = {
-  enabled: 'success',
-  success: 'success',
-  disabled: 'info',
-  failed: 'danger',
+const statusMap: Record<string, [string, string]> = {
+  enabled: ['success', '啟用'],
+  disabled: ['info', '停用'],
+  success: ['success', '成功'],
+  failed: ['danger', '失敗'],
 }
 
-const labelMap: Record<string, string> = {
-  enabled: '啟用',
-  disabled: '停用',
-  success: '成功',
-  failed: '失敗',
-}
-
-const tagType = computed(() => typeMap[props.status] || 'info')
-const label = computed(() => labelMap[props.status] ?? props.status)
+const tagType = computed(() => statusMap[props.status]?.[0] || 'info')
+const label = computed(() => statusMap[props.status]?.[1] ?? props.status)
 </script>
 
 <template>

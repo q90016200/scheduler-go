@@ -12,7 +12,6 @@ import (
 	"gorm.io/gorm"
 	"io"
 	"net/http"
-	"strconv"
 )
 
 type TaskController struct {
@@ -32,14 +31,7 @@ func (ctrl *TaskController) ListTasksHandler(c *gin.Context) {
 	sortField := c.Query("sort_field") // 排序字段
 	sortOrder := c.Query("sort_order") // 排序方式（asc 或 desc）
 
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
-	if limit <= 0 || limit > 100 {
-		limit = 20
-	}
-	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-	if offset < 0 {
-		offset = 0
-	}
+	limit, offset := pageParams(c)
 
 	// 調用 Service
 	tasks, total, err := ctrl.services.TaskServices.ListTasks(status, groupID, name, sortField, sortOrder, limit, offset)
@@ -55,20 +47,9 @@ func (ctrl *TaskController) ListTasksHandler(c *gin.Context) {
 
 // GetTaskHandler 取得單一任務
 func (ctrl *TaskController) GetTaskHandler(c *gin.Context) {
-	id := c.Param("id")
-	if id == "" {
-		response.Fail(c, http.StatusBadRequest, "id is empty", nil)
-		return
-	}
-
-	task, err := ctrl.services.TaskServices.GetTask(id)
+	task, err := ctrl.services.TaskServices.GetTask(c.Param("id"))
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, http.StatusNotFound, "任務不存在", nil)
-			return
-		}
-		logger.WithTrace(c).Error(err.Error())
-		response.Fail(c, http.StatusInternalServerError, "取得任務失敗", nil)
+		failErr(c, err, "任務不存在", "取得任務失敗")
 		return
 	}
 
@@ -82,16 +63,7 @@ func (ctrl *TaskController) CreateTaskHandler(c *gin.Context) {
 
 	// 解析並綁定請求數據到 CreateTaskReq 結構體
 	var req models.CreateTaskReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Error(err.Error())
-		// 解析 JSON 時的錯誤
-		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
-		return
-	}
-
-	if err := utils.MyValidator.Struct(req); err != nil {
-		log.Error(err.Error())
-		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
+	if !bindJSON(c, &req) {
 		return
 	}
 
@@ -113,38 +85,15 @@ func (ctrl *TaskController) CreateTaskHandler(c *gin.Context) {
 // UpdateTaskHandler 更新任務
 func (ctrl *TaskController) UpdateTaskHandler(c *gin.Context) {
 	// 獲取帶有 trace_id 的 logger
-	log := logger.WithTrace(c)
-
-	id := c.Param("id")
-	if id == "" {
-		errMsg := "id is empty"
-		log.Info(errMsg)
-		response.Fail(c, http.StatusBadRequest, errMsg, nil)
-		return
-	}
 
 	var req models.UpdateTaskReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		// 解析 JSON 時的錯誤
-		log.Info(err.Error())
-		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
+	if !bindJSON(c, &req) {
 		return
 	}
 
-	if err := utils.MyValidator.Struct(req); err != nil {
-		log.Info(err.Error())
-		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
-		return
-	}
-
-	task, err := ctrl.services.TaskServices.UpdateTask(id, req)
+	task, err := ctrl.services.TaskServices.UpdateTask(c.Param("id"), req)
 	if err != nil {
-		log.Error(err.Error())
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, http.StatusNotFound, "任務不存在", nil)
-			return
-		}
-		response.Fail(c, http.StatusInternalServerError, "更新任務失敗", nil)
+		failErr(c, err, "任務不存在", "更新任務失敗")
 		return
 	}
 
@@ -153,32 +102,14 @@ func (ctrl *TaskController) UpdateTaskHandler(c *gin.Context) {
 
 // UpdateTaskStatusHandler 切換任務啟用/停用狀態
 func (ctrl *TaskController) UpdateTaskStatusHandler(c *gin.Context) {
-	log := logger.WithTrace(c)
-
-	id := c.Param("id")
-	if id == "" {
-		response.Fail(c, http.StatusBadRequest, "id is empty", nil)
-		return
-	}
-
 	var req models.UpdateTaskStatusReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
-		return
-	}
-	if err := utils.MyValidator.Struct(req); err != nil {
-		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
+	if !bindJSON(c, &req) {
 		return
 	}
 
-	task, err := ctrl.services.TaskServices.UpdateTaskStatus(id, req.Status, req.UserId)
+	task, err := ctrl.services.TaskServices.UpdateTaskStatus(c.Param("id"), req.Status, req.UserId)
 	if err != nil {
-		log.Error(err.Error())
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, http.StatusNotFound, "任務不存在", nil)
-			return
-		}
-		response.Fail(c, http.StatusInternalServerError, "更新任務狀態失敗", nil)
+		failErr(c, err, "任務不存在", "更新任務狀態失敗")
 		return
 	}
 
@@ -190,10 +121,6 @@ func (ctrl *TaskController) RunTaskHandler(c *gin.Context) {
 	log := logger.WithTrace(c)
 
 	id := c.Param("id")
-	if id == "" {
-		response.Fail(c, http.StatusBadRequest, "id is empty", nil)
-		return
-	}
 
 	var req models.RunTaskRequest
 	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
@@ -233,13 +160,7 @@ func (ctrl *TaskController) RunTaskHandler(c *gin.Context) {
 
 // CancelTaskRunHandler 取消任務目前進行中的「立即執行」重複批次
 func (ctrl *TaskController) CancelTaskRunHandler(c *gin.Context) {
-	id := c.Param("id")
-	if id == "" {
-		response.Fail(c, http.StatusBadRequest, "id is empty", nil)
-		return
-	}
-
-	if err := ctrl.services.TaskServices.CancelRunNow(id); err != nil {
+	if err := ctrl.services.TaskServices.CancelRunNow(c.Param("id")); err != nil {
 		if errors.Is(err, scheduler.ErrBatchNotFound) {
 			response.Fail(c, http.StatusNotFound, "找不到該任務進行中的批次", nil)
 			return
@@ -254,24 +175,8 @@ func (ctrl *TaskController) CancelTaskRunHandler(c *gin.Context) {
 
 // DeleteTaskHandler 刪除任務
 func (ctrl *TaskController) DeleteTaskHandler(c *gin.Context) {
-	// 獲取帶有 trace_id 的 logger
-	log := logger.WithTrace(c)
-
-	id := c.Param("id")
-	if id == "" {
-		errMsg := "id is empty"
-		log.Info(errMsg)
-		response.Fail(c, http.StatusBadRequest, errMsg, nil)
-		return
-	}
-
-	if err := ctrl.services.TaskServices.DeleteTask(id); err != nil {
-		log.Error(err.Error())
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, http.StatusNotFound, "任務不存在", nil)
-			return
-		}
-		response.Fail(c, http.StatusInternalServerError, "刪除任務失敗", nil)
+	if err := ctrl.services.TaskServices.DeleteTask(c.Param("id")); err != nil {
+		failErr(c, err, "任務不存在", "刪除任務失敗")
 		return
 	}
 	response.Success(c, nil, "任務已刪除")
@@ -284,14 +189,7 @@ func (ctrl *TaskController) ListTaskGroupsHandler(c *gin.Context) {
 	sortField := c.Query("sort_field")
 	sortOrder := c.Query("sort_order")
 
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
-	if limit <= 0 || limit > 100 {
-		limit = 20
-	}
-	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-	if offset < 0 {
-		offset = 0
-	}
+	limit, offset := pageParams(c)
 
 	groups, total, err := ctrl.services.TaskServices.ListTaskGroups(status, name, sortField, sortOrder, limit, offset)
 	if err != nil {
@@ -304,20 +202,9 @@ func (ctrl *TaskController) ListTaskGroupsHandler(c *gin.Context) {
 
 // GetTaskGroupHandler 取得單一任務群組
 func (ctrl *TaskController) GetTaskGroupHandler(c *gin.Context) {
-	id := c.Param("id")
-	if id == "" {
-		response.Fail(c, http.StatusBadRequest, "id is empty", nil)
-		return
-	}
-
-	group, err := ctrl.services.TaskServices.GetTaskGroup(id)
+	group, err := ctrl.services.TaskServices.GetTaskGroup(c.Param("id"))
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, http.StatusNotFound, "任務群組不存在", nil)
-			return
-		}
-		logger.WithTrace(c).Error(err.Error())
-		response.Fail(c, http.StatusInternalServerError, "取得任務群組失敗", nil)
+		failErr(c, err, "任務群組不存在", "取得任務群組失敗")
 		return
 	}
 
@@ -331,16 +218,7 @@ func (ctrl *TaskController) CreateTaskGroupHandler(c *gin.Context) {
 
 	// 解析並綁定請求數據到 CreateTaskGroupReq 結構體
 	var req models.CreateTaskGroupReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Error(err.Error())
-		// 解析 JSON 時的錯誤
-		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
-		return
-	}
-
-	if err := utils.MyValidator.Struct(req); err != nil {
-		log.Error(err.Error())
-		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
+	if !bindJSON(c, &req) {
 		return
 	}
 
@@ -362,38 +240,15 @@ func (ctrl *TaskController) CreateTaskGroupHandler(c *gin.Context) {
 // UpdateTaskGroupHandler 更新任務群組
 func (ctrl *TaskController) UpdateTaskGroupHandler(c *gin.Context) {
 	// 獲取帶有 trace_id 的 logger
-	log := logger.WithTrace(c)
-
-	id := c.Param("id")
-	if id == "" {
-		errMsg := "id is empty"
-		log.Info(errMsg)
-		response.Fail(c, http.StatusBadRequest, errMsg, nil)
-		return
-	}
 
 	var req models.UpdateTaskGroupReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		// 解析 JSON 時的錯誤
-		log.Info(err.Error())
-		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
+	if !bindJSON(c, &req) {
 		return
 	}
 
-	if err := utils.MyValidator.Struct(req); err != nil {
-		log.Info(err.Error())
-		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
-		return
-	}
-
-	task, err := ctrl.services.TaskServices.UpdateTaskGroup(id, req)
+	task, err := ctrl.services.TaskServices.UpdateTaskGroup(c.Param("id"), req)
 	if err != nil {
-		log.Error(err.Error())
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, http.StatusNotFound, "任務群組不存在", nil)
-			return
-		}
-		response.Fail(c, http.StatusInternalServerError, "更新任務群組失敗", nil)
+		failErr(c, err, "任務群組不存在", "更新任務群組失敗")
 		return
 	}
 
@@ -402,25 +257,9 @@ func (ctrl *TaskController) UpdateTaskGroupHandler(c *gin.Context) {
 
 // DeleteTaskGroupHandler 刪除任務群組
 func (ctrl *TaskController) DeleteTaskGroupHandler(c *gin.Context) {
-	// 獲取帶有 trace_id 的 logger
-	log := logger.WithTrace(c)
-
-	id := c.Param("id")
-	if id == "" {
-		errMsg := "id is empty"
-		log.Info(errMsg)
-		response.Fail(c, http.StatusBadRequest, errMsg, nil)
-		return
-	}
-
-	deactivated, err := ctrl.services.TaskServices.DeleteTaskGroup(id)
+	deactivated, err := ctrl.services.TaskServices.DeleteTaskGroup(c.Param("id"))
 	if err != nil {
-		log.Error(err.Error())
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, http.StatusNotFound, "任務群組不存在", nil)
-			return
-		}
-		response.Fail(c, http.StatusInternalServerError, "刪除任務群組失敗", nil)
+		failErr(c, err, "任務群組不存在", "刪除任務群組失敗")
 		return
 	}
 

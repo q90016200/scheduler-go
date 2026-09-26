@@ -1,7 +1,6 @@
 package services
 
 import (
-	"errors"
 	"fmt"
 	"github.com/q90016200/scheduler-go/internal/models"
 	"github.com/q90016200/scheduler-go/internal/scheduler"
@@ -38,6 +37,19 @@ var listTaskGroupsSortableFields = map[string]bool{
 	"status":     true,
 }
 
+// orderBy 依白名單 allowed 決定排序字串：sortField 不在白名單時回傳 fallback（空字串代表呼叫端不套用排序，
+// 沿用查詢的預設順序），在白名單內則組出 "欄位 ASC/DESC"（sortOrder 為 "desc" 才是 DESC，其餘一律 ASC）
+func orderBy(allowed map[string]bool, sortField, sortOrder, fallback string) string {
+	if !allowed[sortField] {
+		return fallback
+	}
+	dir := "ASC"
+	if sortOrder == "desc" {
+		dir = "DESC"
+	}
+	return sortField + " " + dir
+}
+
 // ListTasks 支持篩選、排序與分頁
 func (s *TaskService) ListTasks(status, groupID, name, sortField, sortOrder string, limit, offset int) ([]models.Task, int64, error) {
 	var tasks []models.Task
@@ -60,12 +72,8 @@ func (s *TaskService) ListTasks(status, groupID, name, sortField, sortOrder stri
 	}
 
 	// 排序條件
-	if listTasksSortableFields[sortField] {
-		order := "ASC"
-		if sortOrder == "desc" {
-			order = "DESC"
-		}
-		query = query.Order(sortField + " " + order)
+	if order := orderBy(listTasksSortableFields, sortField, sortOrder, ""); order != "" {
+		query = query.Order(order)
 	}
 
 	// 查詢結果
@@ -100,64 +108,10 @@ func decorateNextRunAt(cs *scheduler.CronScheduler, task *models.Task) {
 	task.NextRunAt = &unix
 }
 
-func (s *TaskService) CreateTask(input models.CreateTaskReq) (*models.Task, error) {
-	guid := xid.New()
-	task := &models.Task{
-		ID:                  guid.String(),
-		GroupID:             input.GroupID,
-		Name:                input.Name,
-		Description:         input.Description,
-		Schedule:            input.Schedule,
-		Type:                input.Type,
-		Endpoint:            input.EndPoint,
-		Method:              input.Method,
-		Payload:             input.Payload,
-		Status:              input.Status,
-		CreatedBy:           input.UserId,
-		UpdatedBy:           input.UserId,
-		RetryCount:          input.RetryCount,
-		RetryDelayMs:        input.RetryDelayMs,
-		TimeoutSeconds:      input.TimeoutSeconds,
-		Headers:             input.Headers,
-		SuccessStatusCodes:  input.SuccessStatusCodes,
-		NotifyFailThreshold: input.NotifyFailThreshold,
-		NotifyTelegram:      input.NotifyTelegram,
-		NotifySlack:         input.NotifySlack,
-		NotifyEmail:         input.NotifyEmail,
-	}
-	if task.TimeoutSeconds == 0 {
-		task.TimeoutSeconds = 10
-	}
-	if task.Headers == "" {
-		task.Headers = "{}"
-	}
-
-	if err := s.db.Create(task).Error; err != nil {
-		return nil, err
-	}
-
-	// 當是執行的放入 syncMap 內，供排程取得目前可執行 task 清單
-	if task.Status == models.STATUS_ENABLED {
-		if err := scheduler.RegisterTaskJob(s.cronScheduler, task.ID, task); err != nil {
-			// 註冊排程失敗，不留下無法排程的孤兒資料
-			if delErr := s.db.Delete(&models.Task{}, "id = ?", task.ID).Error; delErr != nil {
-				logger.Log.Errorf("task id: %s, 註冊排程失敗後清理孤兒資料也失敗: %v", task.ID, delErr)
-			}
-			return nil, err
-		}
-	}
-
-	return task, nil
-}
-
-// taskUpdatableColumns UpdateTask 允許更新的欄位，排除 created_at/created_by
-var taskUpdatableColumns = []string{
-	"group_id", "name", "description", "schedule", "type", "endpoint", "method", "payload", "status", "updated_by",
-	"retry_count", "retry_delay_ms", "timeout_seconds", "headers", "success_status_codes",
-	"notify_fail_threshold", "notify_telegram", "notify_slack", "notify_email",
-}
-
-func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models.Task, error) {
+// taskFromReq 把 CreateTaskReq/UpdateTaskReq（同一型別）映射進 *models.Task，並套用
+// TimeoutSeconds/Headers 的預設值（欄位留空時 GORM 不會套用 column default，須在這裡補上）。
+// CreatedBy 只有 CreateTask 需要，由呼叫端在拿到回傳的 task 後自行補設。
+func taskFromReq(id string, input models.CreateTaskReq) *models.Task {
 	task := &models.Task{
 		ID:                  id,
 		GroupID:             input.GroupID,
@@ -178,7 +132,6 @@ func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models
 		NotifyFailThreshold: input.NotifyFailThreshold,
 		NotifyTelegram:      input.NotifyTelegram,
 		NotifySlack:         input.NotifySlack,
-		NotifyEmail:         input.NotifyEmail,
 	}
 	if task.TimeoutSeconds == 0 {
 		task.TimeoutSeconds = 10
@@ -186,24 +139,53 @@ func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models
 	if task.Headers == "" {
 		task.Headers = "{}"
 	}
+	return task
+}
+
+func (s *TaskService) CreateTask(input models.CreateTaskReq) (*models.Task, error) {
+	task := taskFromReq(xid.New().String(), input)
+	task.CreatedBy = input.UserId
+
+	if err := s.db.Create(task).Error; err != nil {
+		return nil, err
+	}
+
+	// 當是執行的放入 syncMap 內，供排程取得目前可執行 task 清單
+	if task.Status == models.STATUS_ENABLED {
+		if err := scheduler.RegisterTaskJob(s.cronScheduler, task); err != nil {
+			// 註冊排程失敗，不留下無法排程的孤兒資料
+			if delErr := s.db.Delete(&models.Task{}, "id = ?", task.ID).Error; delErr != nil {
+				logger.Log.Errorf("task id: %s, 註冊排程失敗後清理孤兒資料也失敗: %v", task.ID, delErr)
+			}
+			return nil, err
+		}
+	}
+
+	return task, nil
+}
+
+// taskUpdatableColumns UpdateTask 允許更新的欄位，排除 created_at/created_by
+var taskUpdatableColumns = []string{
+	"group_id", "name", "description", "schedule", "type", "endpoint", "method", "payload", "status", "updated_by",
+	"retry_count", "retry_delay_ms", "timeout_seconds", "headers", "success_status_codes",
+	"notify_fail_threshold", "notify_telegram", "notify_slack",
+}
+
+func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models.Task, error) {
+	task := taskFromReq(id, input)
 
 	result := s.db.Model(&models.Task{}).Where("id = ?", id).Select(taskUpdatableColumns).Updates(task)
 	if result.Error != nil {
-		errMsg := fmt.Sprintf("task: %T, db.Updates err: %v", task, result.Error)
-		return nil, errors.New(errMsg)
+		return nil, fmt.Errorf("task: %T, db.Updates err: %v", task, result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return nil, gorm.ErrRecordNotFound
 	}
 
 	// 重新啟動排程任務
-	if err := scheduler.UnregisterTaskJob(s.cronScheduler, id); err != nil {
-		errMsg := fmt.Sprintf("task: %T, UnregisterTaskJob err: %v", task, err)
-		logger.Log.Error(errMsg)
-		return nil, err
-	}
+	scheduler.UnregisterTaskJob(s.cronScheduler, id)
 	if task.Status == models.STATUS_ENABLED {
-		if err := scheduler.RegisterTaskJob(s.cronScheduler, id, task); err != nil {
+		if err := scheduler.RegisterTaskJob(s.cronScheduler, task); err != nil {
 			errMsg := fmt.Sprintf("task: %T, RegisterTaskJob err: %v", task, err)
 			logger.Log.Error(errMsg)
 			return nil, err
@@ -232,13 +214,9 @@ func (s *TaskService) UpdateTaskStatus(id, status, userId string) (*models.Task,
 	task.Status = status
 	task.UpdatedBy = userId
 
-	if err := scheduler.UnregisterTaskJob(s.cronScheduler, id); err != nil {
-		errMsg := fmt.Sprintf("task: %T, UnregisterTaskJob err: %v", task, err)
-		logger.Log.Error(errMsg)
-		return nil, err
-	}
+	scheduler.UnregisterTaskJob(s.cronScheduler, id)
 	if status == models.STATUS_ENABLED {
-		if err := scheduler.RegisterTaskJob(s.cronScheduler, id, &task); err != nil {
+		if err := scheduler.RegisterTaskJob(s.cronScheduler, &task); err != nil {
 			errMsg := fmt.Sprintf("task: %T, RegisterTaskJob err: %v", task, err)
 			logger.Log.Error(errMsg)
 			return nil, err
@@ -275,11 +253,7 @@ func (s *TaskService) DeleteTask(id string) error {
 		return gorm.ErrRecordNotFound
 	}
 
-	if err := scheduler.UnregisterTaskJob(s.cronScheduler, id); err != nil {
-		errMsg := fmt.Sprintf("task id: %s, UnregisterTaskJob err: %v", id, err)
-		logger.Log.Error(errMsg)
-		return err
-	}
+	scheduler.UnregisterTaskJob(s.cronScheduler, id)
 
 	return nil
 }
@@ -301,12 +275,8 @@ func (s *TaskService) ListTaskGroups(status, name, sortField, sortOrder string, 
 		return nil, 0, err
 	}
 
-	if listTaskGroupsSortableFields[sortField] {
-		order := "ASC"
-		if sortOrder == "desc" {
-			order = "DESC"
-		}
-		query = query.Order(sortField + " " + order)
+	if order := orderBy(listTaskGroupsSortableFields, sortField, sortOrder, ""); order != "" {
+		query = query.Order(order)
 	}
 
 	err := query.Limit(limit).Offset(offset).Find(&groups).Error
@@ -355,11 +325,9 @@ func (s *TaskService) deactivateGroupTasksTx(tx *gorm.DB, groupID string) ([]mod
 }
 
 // unregisterTasks 取消一批任務的 cron 排程（純記憶體操作，於交易 commit 後呼叫）
-func (s *TaskService) unregisterTasks(tasks []models.Task, context string) {
+func (s *TaskService) unregisterTasks(tasks []models.Task) {
 	for _, task := range tasks {
-		if err := scheduler.UnregisterTaskJob(s.cronScheduler, task.ID); err != nil {
-			logger.Log.Errorf("%s, task id: %s, UnregisterTaskJob err: %v", context, task.ID, err)
-		}
+		scheduler.UnregisterTaskJob(s.cronScheduler, task.ID)
 	}
 }
 
@@ -395,13 +363,10 @@ func (s *TaskService) UpdateTaskGroup(id string, input models.UpdateTaskGroupReq
 		return nil
 	})
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, err
-		}
 		return nil, fmt.Errorf("task group: %T, update err: %w", group, err)
 	}
 
-	s.unregisterTasks(deactivated, fmt.Sprintf("group id: %s", id))
+	s.unregisterTasks(deactivated)
 
 	return group, nil
 }
@@ -427,13 +392,10 @@ func (s *TaskService) DeleteTaskGroup(id string) ([]models.Task, error) {
 		return nil
 	})
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, err
-		}
 		return nil, fmt.Errorf("task group id: %s, delete err: %w", id, err)
 	}
 
-	s.unregisterTasks(deactivated, fmt.Sprintf("group id: %s deleted", id))
+	s.unregisterTasks(deactivated)
 
 	return deactivated, nil
 }

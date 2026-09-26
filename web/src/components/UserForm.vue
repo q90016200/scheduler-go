@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
+import StatusSwitch from './StatusSwitch.vue'
 import type { User, UserWriteDTO } from '../types'
 
 const props = defineProps<{ initial?: User }>()
@@ -38,13 +39,7 @@ defineExpose({ handleSubmit })
       <el-input v-model="form.password" type="password" show-password :placeholder="initial ? '留空代表不變更' : ''" />
     </el-form-item>
     <el-form-item label="狀態">
-      <el-switch
-        v-model="form.status"
-        active-value="enabled"
-        inactive-value="disabled"
-        active-text="啟用"
-        inactive-text="停用"
-      />
+      <StatusSwitch v-model="form.status" />
     </el-form-item>
   </el-form>
 </template>

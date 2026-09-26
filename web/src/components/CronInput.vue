@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import cronstrue from 'cronstrue'
-import 'cronstrue/locales/zh_TW'
+import { describeCron } from '../utils/cron'
 
 const model = defineModel<string>({ required: true })
 
@@ -15,13 +14,8 @@ const presets = [
 
 const readable = computed(() => {
   if (!model.value.trim()) return ''
-  try {
-    return cronstrue.toString(model.value, { locale: 'zh_TW' })
-  } catch {
-    return '格式看起來不像合法的 cron 表達式（分 時 日 月 週）'
-  }
-})
-</script>
+  return describeCron(model.value) || '格式看起來不像合法的 cron 表達式（分 時 日 月 週）'
+})</script>
 
 <template>
   <div class="cron-input">

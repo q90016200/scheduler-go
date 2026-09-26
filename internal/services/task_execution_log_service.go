@@ -64,24 +64,38 @@ func (s *TaskExecutionLogService) GetLog(id string) (*models.TaskExecutionLog, e
 	return &l, err
 }
 
-// taskStatsQuery 統計只採計排程自動觸發、且是這次觸發最終結果的紀錄，
-// 排除立即執行的手動測試與重試中間過程，避免統計失真
-func (s *TaskExecutionLogService) taskStatsQuery(taskID string) *gorm.DB {
+// countStats 一次查詢同時取得符合篩選條件的總筆數與成功筆數（用 FILTER 取代兩條獨立的 COUNT 查詢）
+type countStats struct {
+	Total   int64
+	Success int64
+}
+
+// scanCountStats 對傳入的 query（已套用篩選條件）套用 total/success 兩個聚合欄位
+func scanCountStats(query *gorm.DB) (total, success int64, err error) {
+	var cs countStats
+	err = query.Select("COUNT(*) AS total, COUNT(*) FILTER (WHERE status = ?) AS success", models.EXEC_STATUS_SUCCESS).
+		Scan(&cs).Error
+	return cs.Total, cs.Success, err
+}
+
+// dashboardStatsQuery 統計口徑：只採計排程自動觸發、且是這次觸發最終結果的紀錄，
+// 排除立即執行的手動測試與重試中間過程，避免統計失真；不鎖定單一 task_id
+func (s *TaskExecutionLogService) dashboardStatsQuery() *gorm.DB {
 	return s.db.Model(&models.TaskExecutionLog{}).
-		Where("task_id = ? AND source = ? AND is_final_attempt = ?", taskID, models.SOURCE_CRON, true)
+		Where("source = ? AND is_final_attempt = ?", models.SOURCE_CRON, true)
+}
+
+// taskStatsQuery 統計口徑同 dashboardStatsQuery，多鎖定單一 task_id
+func (s *TaskExecutionLogService) taskStatsQuery(taskID string) *gorm.DB {
+	return s.dashboardStatsQuery().Where("task_id = ?", taskID)
 }
 
 // GetTaskStats 任務執行儀表板小面板：近 30 天成功率／平均耗時，即時 SQL 聚合，不做 cache
 func (s *TaskExecutionLogService) GetTaskStats(taskID string) (*models.TaskStats, error) {
 	cutoff := time.Now().AddDate(0, 0, -30).Unix()
 
-	var total30d, success30d int64
-	if err := s.taskStatsQuery(taskID).Where("created_at >= ?", cutoff).Count(&total30d).Error; err != nil {
-		return nil, err
-	}
-	if err := s.taskStatsQuery(taskID).
-		Where("created_at >= ? AND status = ?", cutoff, models.EXEC_STATUS_SUCCESS).
-		Count(&success30d).Error; err != nil {
+	total30d, success30d, err := scanCountStats(s.taskStatsQuery(taskID).Where("created_at >= ?", cutoff))
+	if err != nil {
 		return nil, err
 	}
 
@@ -111,12 +125,6 @@ func (s *TaskExecutionLogService) GetTaskStats(taskID string) (*models.TaskStats
 	return stats, nil
 }
 
-// dashboardStatsQuery 統計口徑同 taskStatsQuery，只是不鎖定單一 task_id
-func (s *TaskExecutionLogService) dashboardStatsQuery() *gorm.DB {
-	return s.db.Model(&models.TaskExecutionLog{}).
-		Where("source = ? AND is_final_attempt = ?", models.SOURCE_CRON, true)
-}
-
 // GetDashboardStats 全站儀表板：任務啟用/停用數、近 24 小時執行次數與成功率、
 // 近 24 小時失敗 Top 5 任務、目前連續失敗中的任務，即時 SQL 聚合，不做 cache
 func (s *TaskExecutionLogService) GetDashboardStats() (*models.DashboardStats, error) {
@@ -139,13 +147,8 @@ func (s *TaskExecutionLogService) GetDashboardStats() (*models.DashboardStats, e
 		}
 	}
 
-	var total24h, success24h int64
-	if err := s.dashboardStatsQuery().Where("created_at >= ?", cutoff).Count(&total24h).Error; err != nil {
-		return nil, err
-	}
-	if err := s.dashboardStatsQuery().
-		Where("created_at >= ? AND status = ?", cutoff, models.EXEC_STATUS_SUCCESS).
-		Count(&success24h).Error; err != nil {
+	total24h, success24h, err := scanCountStats(s.dashboardStatsQuery().Where("created_at >= ?", cutoff))
+	if err != nil {
 		return nil, err
 	}
 

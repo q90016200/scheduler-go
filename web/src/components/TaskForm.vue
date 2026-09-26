@@ -3,6 +3,7 @@ import { onMounted, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { Delete, Plus } from '@element-plus/icons-vue'
 import CronInput from './CronInput.vue'
+import StatusSwitch from './StatusSwitch.vue'
 import { listTaskGroups } from '../api/taskGroups'
 import { getNotifyConfig } from '../api/tasks'
 import { useAuthStore } from '../stores/auth'
@@ -37,7 +38,6 @@ const form = reactive<TaskWriteDTO>({
   notify_fail_threshold: props.initial?.notify_fail_threshold ?? 0,
   notify_telegram: props.initial?.notify_telegram ?? false,
   notify_slack: props.initial?.notify_slack ?? false,
-  notify_email: props.initial?.notify_email ?? false,
 })
 
 // headers 用 key-value 列表編輯，送出時再序列化成 JSON 字串存進 form.headers
@@ -51,13 +51,6 @@ function parseHeaderRows(raw?: string) {
   }
 }
 const headerRows = ref(parseHeaderRows(props.initial?.headers))
-
-function addHeaderRow() {
-  headerRows.value.push({ key: '', value: '' })
-}
-function removeHeaderRow(index: number) {
-  headerRows.value.splice(index, 1)
-}
 
 watch(
   () => form.type,
@@ -106,10 +99,9 @@ const rules: FormRules<TaskWriteDTO> = {
 
 async function handleSubmit() {
   if (!(await formRef.value?.validate().catch(() => false))) return
-  const headers: Record<string, string> = {}
-  headerRows.value.forEach((row) => {
-    if (row.key.trim()) headers[row.key.trim()] = row.value
-  })
+  const headers = Object.fromEntries(
+    headerRows.value.filter((r) => r.key.trim()).map((r) => [r.key.trim(), r.value]),
+  )
   emit('submit', { ...form, headers: JSON.stringify(headers) })
 }
 
@@ -146,11 +138,7 @@ defineExpose({ handleSubmit })
     </el-form-item>
     <el-form-item label="Method" prop="method">
       <el-select v-if="form.type === 'http'" v-model="form.method">
-        <el-option label="GET" value="GET" />
-        <el-option label="POST" value="POST" />
-        <el-option label="PUT" value="PUT" />
-        <el-option label="DELETE" value="DELETE" />
-        <el-option label="PATCH" value="PATCH" />
+        <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
       </el-select>
       <el-input v-else v-model="form.method" placeholder="package.Service/MethodName" />
     </el-form-item>
@@ -161,9 +149,9 @@ defineExpose({ handleSubmit })
       <div v-for="(row, index) in headerRows" :key="index" class="header-row">
         <el-input v-model="row.key" placeholder="Key，如 Authorization" style="width: 200px" />
         <el-input v-model="row.value" placeholder="Value" style="width: 260px" />
-        <el-button :icon="Delete" circle @click="removeHeaderRow(index)" />
+        <el-button :icon="Delete" circle @click="headerRows.splice(index, 1)" />
       </div>
-      <el-button :icon="Plus" @click="addHeaderRow">新增 Header</el-button>
+      <el-button :icon="Plus" @click="headerRows.push({ key: '', value: '' })">新增 Header</el-button>
     </el-form-item>
     <el-form-item v-if="form.type === 'http'" label="成功狀態碼" prop="success_status_codes">
       <el-input v-model="form.success_status_codes" placeholder="如 200,201,2xx" style="width: 260px" />
@@ -186,22 +174,14 @@ defineExpose({ handleSubmit })
       <div>
         <el-checkbox v-model="form.notify_telegram">Telegram</el-checkbox>
         <el-checkbox v-model="form.notify_slack">Slack</el-checkbox>
-        <el-checkbox v-model="form.notify_email">Email</el-checkbox>
       </div>
       <div v-if="notifyConfig">
         <span v-if="form.notify_telegram && !notifyConfig.telegram_configured" class="notify-warning">Telegram 尚未設定，通知不會送出</span>
         <span v-if="form.notify_slack && !notifyConfig.slack_configured" class="notify-warning">Slack 尚未設定，通知不會送出</span>
-        <span v-if="form.notify_email && !notifyConfig.email_configured" class="notify-warning">Email 尚未設定，通知不會送出</span>
       </div>
     </el-form-item>
     <el-form-item label="狀態">
-      <el-switch
-        v-model="form.status"
-        active-value="enabled"
-        inactive-value="disabled"
-        active-text="啟用"
-        inactive-text="停用"
-      />
+      <StatusSwitch v-model="form.status" />
     </el-form-item>
   </el-form>
 </template>

@@ -13,14 +13,14 @@ func main() {
 	config.LoadConfig()
 
 	// 初始化資料庫
-	_, err := database.InitializeDB()
+	db, err := database.InitializeDB()
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
 	// 執行遷移
 	fmt.Println("Running database migrations...")
-	err = database.DB.AutoMigrate(&models.User{}, &models.Task{}, &models.TaskGroup{}, &models.TaskExecutionLog{})
+	err = db.AutoMigrate(&models.User{}, &models.Task{}, &models.TaskGroup{}, &models.TaskExecutionLog{})
 	if err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}

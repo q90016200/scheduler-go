@@ -23,17 +23,11 @@ type Config struct {
 	NotifyConfig              NotifyConfig
 }
 
-// NotifyConfig 失敗通知的三個管道設定；任一管道必要欄位為空就視為未啟用
+// NotifyConfig 失敗通知的兩個管道設定；任一管道必要欄位為空就視為未啟用
 type NotifyConfig struct {
 	TelegramBotToken string
 	TelegramChatID   string
 	SlackWebhookURL  string
-	SMTPHost         string
-	SMTPPort         string
-	SMTPUser         string
-	SMTPPassword     string
-	SMTPFrom         string
-	SMTPTo           string
 }
 
 // PostgresConfig PostgreSQL 配置
@@ -106,12 +100,6 @@ func LoadConfig() {
 			TelegramBotToken: viper.GetString("TELEGRAM_BOT_TOKEN"),
 			TelegramChatID:   viper.GetString("TELEGRAM_CHAT_ID"),
 			SlackWebhookURL:  viper.GetString("SLACK_WEBHOOK_URL"),
-			SMTPHost:         viper.GetString("SMTP_HOST"),
-			SMTPPort:         viper.GetString("SMTP_PORT"),
-			SMTPUser:         viper.GetString("SMTP_USER"),
-			SMTPPassword:     viper.GetString("SMTP_PASSWORD"),
-			SMTPFrom:         viper.GetString("SMTP_FROM"),
-			SMTPTo:           viper.GetString("SMTP_TO"),
 		},
 		PostgresConfig: PostgresConfig{
 			Username:               viper.GetString("POSTGRES_USER"),

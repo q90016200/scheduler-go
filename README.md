@@ -34,7 +34,7 @@ scheduler-tool/
 │   ├── scheduler/          # cron 排程器，執行 http/rpc 任務、記錄執行結果、清除過期紀錄
 │   │   ├── cron.go              # cron.Recover 防護、每分鐘 poller、SSRF 防護的 resty client
 │   │   └── jobs.go
-│   ├── notify/             # 失敗通知管道（telegram.go / slack.go / email.go），由 jobs.go 呼叫
+│   ├── notify/             # 失敗通知管道（telegram.go / slack.go），由 jobs.go 呼叫
 │   ├── ssrf/               # 任務執行連線的 SSRF 防護（ssrf.go，見下方「安全性」）
 │   ├── middleware/         # 中介軟體
 │   │   ├── auth_middleware.go
@@ -130,7 +130,6 @@ docker run -d -p 8080:8080 --env-file .env schedule-go   # 啟動
 | `POSTGRES_*` | PostgreSQL 連線資訊。任一項缺少同樣會在啟動時 `log.Fatalf` | - |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 失敗通知的 Telegram 管道；任一項留空視為停用 | - |
 | `SLACK_WEBHOOK_URL` | 失敗通知的 Slack 管道（Incoming Webhook URL）；留空視為停用 | - |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` / `SMTP_TO` | 失敗通知的 Email 管道；`SMTP_HOST`/`SMTP_FROM`/`SMTP_TO` 任一項留空視為停用 | - |
 
 ## API 端點
 
@@ -161,7 +160,7 @@ docker run -d -p 8080:8080 --env-file .env schedule-go   # 啟動
   - `headers`（自由 JSON 字串，如 `{"Authorization":"Bearer xxx"}`；http 任務轉成 request headers、rpc 任務轉成 gRPC metadata；明文儲存，跟 `payload`/`endpoint` 同信任模型）
   - `success_status_codes`（僅 http 任務；逗號分隔的狀態碼或類別，如 `200,201,2xx`，最多 100 字元。留空沿用預設：HTTP 400 以下視為成功。有設定時，符合者即成功（可把 `404` 之類設為成功）；不符合者失敗，其中 5xx 仍可重試、其餘不重試）
   - `notify_fail_threshold`（1-20，連續失敗達此次數才發一次失敗通知，之後靜音直到成功一次重新累積；0 表示不啟用通知）
-  - `notify_telegram`/`notify_slack`/`notify_email`（布林，個別勾選要不要收該管道的通知；管道本身要在 `.env` 設定好才會真的送出）
+  - `notify_telegram`/`notify_slack`（布林，個別勾選要不要收該管道的通知；管道本身要在 `.env` 設定好才會真的送出）
 
 **TaskGroup**（`/api/tasks/group`）：`GET /`（可用 `status`/`name`/`sort_field`/`sort_order`/`limit`/`offset`）、`GET /:id`、`POST /`、`PUT /:id`、`DELETE /:id`。將群組 `PUT` 成 `disabled`，或直接 `DELETE` 群組，都會連動把該群組底下仍為 `enabled` 的任務改成 `disabled` 並取消排程（`DELETE` 的回應會帶 `deactivated_tasks: [{id, name}]`，供前端提示使用者哪些任務被停用了）；改回 `enabled` 不會自動恢復子任務，需個別開啟。刪除群組不會刪除底下的任務，只會解除關聯（任務的 `group_id` 變成 `null`）——前端刪除前的確認對話框會列出底下所有任務（含已停用）的總數與名稱，避免使用者不知道這件事。
 
@@ -169,11 +168,11 @@ docker run -d -p 8080:8080 --env-file .env schedule-go   # 啟動
 - `source`（`cron`/`manual`，區分是排程自動觸發還是立即執行手動觸發）
 - `attempt_number`（第幾次嘗試，第一次是 1）、`is_final_attempt`（是否為這次觸發（含所有重試）的最後一筆；設有 `retry_count` 的任務失敗重試時，每次嘗試各存一筆，只有最後一筆會是 `true`）
 
-**失敗重試與通知**：任務失敗（網路錯誤/逾時/HTTP 5xx）時依 `retry_count`/`retry_delay_ms` 重試；HTTP 4xx 與參數格式錯誤（例如 method/payload 格式不對）視為不可重試，直接判定為這次觸發的最終結果。只有排程自動觸發（`source=cron`）的最終結果才會累加/清零任務的連續失敗次數：失敗 +1、成功清零；連續失敗次數剛好等於 `notify_fail_threshold` 的那一刻，依任務勾選的管道（Telegram/Slack/Email）非同步發送一次通知，之後即使繼續失敗也靜音，直到成功一次重新累積才會再通知一次。通知發送失敗只記 log，不重試、不影響任務執行本身。
+**失敗重試與通知**：任務失敗（網路錯誤/逾時/HTTP 5xx）時依 `retry_count`/`retry_delay_ms` 重試；HTTP 4xx 與參數格式錯誤（例如 method/payload 格式不對）視為不可重試，直接判定為這次觸發的最終結果。只有排程自動觸發（`source=cron`）的最終結果才會累加/清零任務的連續失敗次數：失敗 +1、成功清零；連續失敗次數剛好等於 `notify_fail_threshold` 的那一刻，依任務勾選的管道（Telegram/Slack）非同步發送一次通知，之後即使繼續失敗也靜音，直到成功一次重新累積才會再通知一次。通知發送失敗只記 log，不重試、不影響任務執行本身。
 
 **儀表板**（`/api/dashboard`）：`GET /stats`，回傳全站統計——啟用/停用任務數、近 24 小時執行次數與成功率、近 24 小時失敗次數 Top 5 任務、目前連續失敗中的任務清單；統計口徑與 `/tasks/:id/stats` 相同（只採計 `source=cron` 且為該次觸發最終結果的紀錄），即時 SQL 聚合，不做快取。
 
-**通知設定狀態**（`/api/notify`）：`GET /config`，回傳 `{telegram_configured, slack_configured, email_configured}` 三個布林值，只看對應的 `.env` 欄位是否已填，不回傳任何 token/密碼本身；供前端在任務表單提醒使用者「勾了某管道但 `.env` 沒設定，通知不會送出」。
+**通知設定狀態**（`/api/notify`）：`GET /config`，回傳 `{telegram_configured, slack_configured}` 兩個布林值，只看對應的 `.env` 欄位是否已填，不回傳任何 token/密碼本身；供前端在任務表單提醒使用者「勾了某管道但 `.env` 沒設定，通知不會送出」。
 
 ## 安全性
 

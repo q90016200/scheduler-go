@@ -4,7 +4,6 @@ import router from '../router'
 
 const http = axios.create({
   baseURL: '/api',
-  withCredentials: true,
 })
 
 // 後端驗證錯誤的 field 是 json 欄位名，對應表單上的中文標籤；沒列到的原樣顯示

@@ -7,10 +7,8 @@ import (
 	"github.com/q90016200/scheduler-go/internal/models"
 	"github.com/q90016200/scheduler-go/pkg/logger"
 	"github.com/q90016200/scheduler-go/pkg/response"
-	"github.com/q90016200/scheduler-go/pkg/utils"
 	"gorm.io/gorm"
 	"net/http"
-	"strconv"
 )
 
 type UserController struct {
@@ -25,14 +23,7 @@ func NewUserController(services *app.AppServices) *UserController {
 func (ctrl *UserController) ListUsersHandler(c *gin.Context) {
 	name := c.Query("name")
 
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
-	if limit <= 0 || limit > 100 {
-		limit = 20
-	}
-	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-	if offset < 0 {
-		offset = 0
-	}
+	limit, offset := pageParams(c)
 
 	users, total, err := ctrl.services.UserService.ListUsers(name, limit, offset)
 	if err != nil {
@@ -46,20 +37,9 @@ func (ctrl *UserController) ListUsersHandler(c *gin.Context) {
 
 // GetUserHandler 取得單一使用者
 func (ctrl *UserController) GetUserHandler(c *gin.Context) {
-	id := c.Param("id")
-	if id == "" {
-		response.Fail(c, http.StatusBadRequest, "id is empty", nil)
-		return
-	}
-
-	user, err := ctrl.services.UserService.GetUser(id)
+	user, err := ctrl.services.UserService.GetUser(c.Param("id"))
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, http.StatusNotFound, "使用者不存在", nil)
-			return
-		}
-		logger.WithTrace(c).Error(err.Error())
-		response.Fail(c, http.StatusInternalServerError, "取得使用者失敗", nil)
+		failErr(c, err, "使用者不存在", "取得使用者失敗")
 		return
 	}
 
@@ -71,15 +51,7 @@ func (ctrl *UserController) CreateUserHandler(c *gin.Context) {
 	log := logger.WithTrace(c)
 
 	var req models.CreateUserReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Error(err.Error())
-		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
-		return
-	}
-
-	if err := utils.MyValidator.Struct(req); err != nil {
-		log.Error(err.Error())
-		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
+	if !bindJSON(c, &req) {
 		return
 	}
 
@@ -99,35 +71,15 @@ func (ctrl *UserController) CreateUserHandler(c *gin.Context) {
 
 // UpdateUserHandler 更新使用者
 func (ctrl *UserController) UpdateUserHandler(c *gin.Context) {
-	log := logger.WithTrace(c)
-
-	id := c.Param("id")
-	if id == "" {
-		response.Fail(c, http.StatusBadRequest, "id is empty", nil)
-		return
-	}
 
 	var req models.UpdateUserReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Error(err.Error())
-		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
+	if !bindJSON(c, &req) {
 		return
 	}
 
-	if err := utils.MyValidator.Struct(req); err != nil {
-		log.Error(err.Error())
-		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
-		return
-	}
-
-	user, err := ctrl.services.UserService.UpdateUser(id, req)
+	user, err := ctrl.services.UserService.UpdateUser(c.Param("id"), req)
 	if err != nil {
-		log.Error(err.Error())
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, http.StatusNotFound, "使用者不存在", nil)
-			return
-		}
-		response.Fail(c, http.StatusInternalServerError, "更新使用者失敗", nil)
+		failErr(c, err, "使用者不存在", "更新使用者失敗")
 		return
 	}
 
@@ -138,26 +90,12 @@ func (ctrl *UserController) UpdateUserHandler(c *gin.Context) {
 func (ctrl *UserController) UpdateUserStatusHandler(c *gin.Context) {
 	log := logger.WithTrace(c)
 
-	id := c.Param("id")
-	if id == "" {
-		response.Fail(c, http.StatusBadRequest, "id is empty", nil)
-		return
-	}
-
 	var req models.UpdateUserStatusReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Error(err.Error())
-		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
+	if !bindJSON(c, &req) {
 		return
 	}
 
-	if err := utils.MyValidator.Struct(req); err != nil {
-		log.Error(err.Error())
-		response.Fail(c, http.StatusBadRequest, "參數驗證失敗", utils.FormatValidationErrors(err))
-		return
-	}
-
-	if err := ctrl.services.UserService.UpdateUserStatus(id, req.Status); err != nil {
+	if err := ctrl.services.UserService.UpdateUserStatus(c.Param("id"), req.Status); err != nil {
 		log.Error(err.Error())
 		response.Fail(c, http.StatusInternalServerError, "更新使用者狀態失敗", nil)
 		return
@@ -168,21 +106,8 @@ func (ctrl *UserController) UpdateUserStatusHandler(c *gin.Context) {
 
 // DeleteUserHandler 刪除使用者
 func (ctrl *UserController) DeleteUserHandler(c *gin.Context) {
-	log := logger.WithTrace(c)
-
-	id := c.Param("id")
-	if id == "" {
-		response.Fail(c, http.StatusBadRequest, "id is empty", nil)
-		return
-	}
-
-	if err := ctrl.services.UserService.DeleteUser(id); err != nil {
-		log.Error(err.Error())
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, http.StatusNotFound, "使用者不存在", nil)
-			return
-		}
-		response.Fail(c, http.StatusInternalServerError, "刪除使用者失敗", nil)
+	if err := ctrl.services.UserService.DeleteUser(c.Param("id")); err != nil {
+		failErr(c, err, "使用者不存在", "刪除使用者失敗")
 		return
 	}
 

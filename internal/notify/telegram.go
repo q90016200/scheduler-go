@@ -9,9 +9,7 @@ import (
 	"github.com/q90016200/scheduler-go/config"
 )
 
-type telegramChannel struct{}
-
-func (telegramChannel) Send(ctx context.Context, msg Message) error {
+func sendTelegram(ctx context.Context, msg Message) error {
 	cfg := config.AppConfig.NotifyConfig
 	if cfg.TelegramBotToken == "" || cfg.TelegramChatID == "" {
 		return nil
@@ -30,13 +28,5 @@ func (telegramChannel) Send(ctx context.Context, msg Message) error {
 	}
 	req.URL.RawQuery = form.Encode()
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		return fmt.Errorf("telegram API 回應非 2xx: %d", resp.StatusCode)
-	}
-	return nil
+	return do(req, "telegram API")
 }

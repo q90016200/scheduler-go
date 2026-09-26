@@ -11,14 +11,6 @@ import (
 // 啟用時需同時恢復 web/src/router/index.ts 的登入守衛與 App.vue 的登入殼層。
 func JWTAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		//// 從 Authorization 頭中獲取 JWT 令牌
-		//tokenString := c.GetHeader("Authorization")
-		//if tokenString == "" {
-		//	c.JSON(http.StatusUnauthorized, gin.H{"error": "缺少認證標頭"})
-		//	c.Abort()
-		//	return
-		//}
-
 		// 從 Cookie 獲取 JWT
 		tokenString, err := c.Cookie("auth_token")
 		if err != nil {

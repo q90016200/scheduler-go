@@ -1,14 +1,11 @@
 package controllers
 
 import (
-	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/q90016200/scheduler-go/internal/app"
 	"github.com/q90016200/scheduler-go/pkg/logger"
 	"github.com/q90016200/scheduler-go/pkg/response"
-	"gorm.io/gorm"
 	"net/http"
-	"strconv"
 )
 
 type TaskExecutionLogController struct {
@@ -28,14 +25,7 @@ func (ctrl *TaskExecutionLogController) ListLogsHandler(c *gin.Context) {
 	sortField := c.Query("sort_field")
 	sortOrder := c.Query("sort_order")
 
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
-	if limit <= 0 || limit > 100 {
-		limit = 20
-	}
-	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-	if offset < 0 {
-		offset = 0
-	}
+	limit, offset := pageParams(c)
 
 	logs, total, err := ctrl.services.TaskExecutionLogService.ListLogs(taskID, taskName, groupID, status, sortField, sortOrder, limit, offset)
 	if err != nil {
@@ -49,20 +39,9 @@ func (ctrl *TaskExecutionLogController) ListLogsHandler(c *gin.Context) {
 
 // GetLogHandler 取得單一執行紀錄
 func (ctrl *TaskExecutionLogController) GetLogHandler(c *gin.Context) {
-	id := c.Param("id")
-	if id == "" {
-		response.Fail(c, http.StatusBadRequest, "id is empty", nil)
-		return
-	}
-
-	execLog, err := ctrl.services.TaskExecutionLogService.GetLog(id)
+	execLog, err := ctrl.services.TaskExecutionLogService.GetLog(c.Param("id"))
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, http.StatusNotFound, "執行紀錄不存在", nil)
-			return
-		}
-		logger.WithTrace(c).Error(err.Error())
-		response.Fail(c, http.StatusInternalServerError, "取得執行紀錄失敗", nil)
+		failErr(c, err, "執行紀錄不存在", "取得執行紀錄失敗")
 		return
 	}
 
@@ -71,13 +50,7 @@ func (ctrl *TaskExecutionLogController) GetLogHandler(c *gin.Context) {
 
 // GetTaskStatsHandler 取得單一任務的執行儀表板小面板（近 30 天成功率/平均耗時、近期失敗次數）
 func (ctrl *TaskExecutionLogController) GetTaskStatsHandler(c *gin.Context) {
-	id := c.Param("id")
-	if id == "" {
-		response.Fail(c, http.StatusBadRequest, "id is empty", nil)
-		return
-	}
-
-	stats, err := ctrl.services.TaskExecutionLogService.GetTaskStats(id)
+	stats, err := ctrl.services.TaskExecutionLogService.GetTaskStats(c.Param("id"))
 	if err != nil {
 		logger.WithTrace(c).Error(err.Error())
 		response.Fail(c, http.StatusInternalServerError, "取得任務統計失敗", nil)

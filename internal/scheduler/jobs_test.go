@@ -33,16 +33,14 @@ func TestRegisterTaskJob(t *testing.T) {
 	cs := newTestScheduler()
 	task := &models.Task{ID: "t1", Type: "http", Schedule: "* * * * *", Method: "GET", Endpoint: "http://example.com"}
 
-	if err := RegisterTaskJob(cs, task.ID, task); err != nil {
+	if err := RegisterTaskJob(cs, task); err != nil {
 		t.Fatalf("RegisterTaskJob returned error: %v", err)
 	}
 	if _, exists := cs.taskCronEntryIDs[task.ID]; !exists {
 		t.Fatal("expected task to be registered in taskCronEntryIDs")
 	}
 
-	if err := UnregisterTaskJob(cs, task.ID); err != nil {
-		t.Fatalf("UnregisterTaskJob returned error: %v", err)
-	}
+	UnregisterTaskJob(cs, task.ID)
 	if _, exists := cs.taskCronEntryIDs[task.ID]; exists {
 		t.Fatal("expected task to be removed from taskCronEntryIDs after Unregister")
 	}
@@ -52,7 +50,7 @@ func TestRegisterTaskJobInvalidSchedule(t *testing.T) {
 	cs := newTestScheduler()
 	task := &models.Task{ID: "t2", Type: "http", Schedule: "not-a-cron-expr", Method: "GET", Endpoint: "http://example.com"}
 
-	if err := RegisterTaskJob(cs, task.ID, task); err == nil {
+	if err := RegisterTaskJob(cs, task); err == nil {
 		t.Fatal("expected error for invalid cron expression")
 	}
 	if _, exists := cs.taskCronEntryIDs[task.ID]; exists {
@@ -64,7 +62,7 @@ func TestRegisterTaskJobUnknownType(t *testing.T) {
 	cs := newTestScheduler()
 	task := &models.Task{ID: "t3", Type: "shell", Schedule: "* * * * *"}
 
-	if err := RegisterTaskJob(cs, task.ID, task); err == nil {
+	if err := RegisterTaskJob(cs, task); err == nil {
 		t.Fatal("expected error for unknown task type")
 	}
 	if _, exists := cs.taskCronEntryIDs[task.ID]; exists {
@@ -182,10 +180,10 @@ func TestRegisterTaskJobReplacesOldEntry(t *testing.T) {
 	cs := newTestScheduler()
 	task := &models.Task{ID: "t5", Type: "http", Schedule: "* * * * *", Method: "GET", Endpoint: "http://example.com"}
 
-	if err := RegisterTaskJob(cs, task.ID, task); err != nil {
+	if err := RegisterTaskJob(cs, task); err != nil {
 		t.Fatalf("first RegisterTaskJob returned error: %v", err)
 	}
-	if err := RegisterTaskJob(cs, task.ID, task); err != nil {
+	if err := RegisterTaskJob(cs, task); err != nil {
 		t.Fatalf("second RegisterTaskJob returned error: %v", err)
 	}
 

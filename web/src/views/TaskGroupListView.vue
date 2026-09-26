@@ -4,18 +4,15 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Edit, Plus, Refresh, View } from '@element-plus/icons-vue'
 import IconButton from '../components/IconButton.vue'
+import StatusSwitch from '../components/StatusSwitch.vue'
 import { deleteTaskGroup, listTaskGroups, updateTaskGroup } from '../api/taskGroups'
 import { listTasks } from '../api/tasks'
 import { useAuthStore } from '../stores/auth'
+import { usePagedList } from '../composables/usePagedList'
 import type { SortOrder, Status, TaskGroup } from '../types'
 
 const router = useRouter()
 const auth = useAuthStore()
-const groups = ref<TaskGroup[]>([])
-const total = ref(0)
-const page = ref(1)
-const pageSize = 20
-const loading = ref(false)
 const statusUpdatingIds = ref(new Set<string>())
 const filters = reactive<{ name: string; status: string; sort_field: 'name' | 'created_at' | 'status' | ''; sort_order: SortOrder }>({
   name: '',
@@ -24,33 +21,20 @@ const filters = reactive<{ name: string; status: string; sort_field: 'name' | 'c
   sort_order: 'asc',
 })
 
-async function load() {
-  loading.value = true
-  try {
-    const result = await listTaskGroups({
+const { items: groups, total, page, pageSize, loading, load, reloadFromFirstPage, handleSortChange: handleSort } = usePagedList<TaskGroup, 'name' | 'created_at' | 'status'>(
+  (p, ps) =>
+    listTaskGroups({
       name: filters.name || undefined,
       status: filters.status || undefined,
       sort_field: filters.sort_field || undefined,
       sort_order: filters.sort_order,
-      limit: pageSize,
-      offset: (page.value - 1) * pageSize,
-    })
-    groups.value = result.groups
-    total.value = result.total
-  } finally {
-    loading.value = false
-  }
-}
+      limit: ps,
+      offset: (p - 1) * ps,
+    }).then((r) => ({ items: r.groups, total: r.total })),
+)
 
-function reloadFromFirstPage() {
-  page.value = 1
-  load()
-}
-
-function handleSortChange({ prop, order }: { prop: string; order: 'ascending' | 'descending' | null }) {
-  filters.sort_field = order ? (prop as 'name' | 'status') : ''
-  filters.sort_order = order === 'ascending' ? 'asc' : 'desc'
-  reloadFromFirstPage()
+function handleSortChange(e: { prop: string; order: 'ascending' | 'descending' | null }) {
+  handleSort(filters, e)
 }
 
 onMounted(load)
@@ -62,16 +46,11 @@ async function handleStatusChange(group: TaskGroup, status: Status) {
     if (status === 'disabled') {
       const enabled = await listTasks({ group_id: group.id, status: 'enabled', limit: 1 })
       if (enabled.total > 0) {
-        try {
-          await ElMessageBox.confirm(
-            `將停用群組「${group.name}」下 ${enabled.total} 個啟用中任務，確定停用？`,
-            '停用群組',
-            { type: 'warning' },
-          )
-        } catch (err) {
-          if (err === 'cancel' || err === 'close') return
-          throw err
-        }
+        await ElMessageBox.confirm(
+          `將停用群組「${group.name}」下 ${enabled.total} 個啟用中任務，確定停用？`,
+          '停用群組',
+          { type: 'warning' },
+        )
       }
     }
 
@@ -79,6 +58,7 @@ async function handleStatusChange(group: TaskGroup, status: Status) {
     ElMessage.success('狀態已更新')
     await load()
   } catch (err) {
+    if (err === 'cancel' || err === 'close') return
     ElMessage.error((err as Error).message || '狀態更新失敗')
   } finally {
     statusUpdatingIds.value.delete(group.id)
@@ -113,15 +93,24 @@ async function handleDelete(group: TaskGroup) {
 </script>
 
 <template>
-  <el-card>
-    <div class="toolbar">
+  <div class="page">
+    <div class="page-head">
+      <div class="title">
+        <h1>任務群組</h1>
+        <span class="meta num">共 {{ total }} 筆</span>
+      </div>
+      <div class="toolbar">
+        <IconButton :icon="Refresh" label="重新整理" :loading="loading" @click="() => load()" />
+        <el-button type="primary" :icon="Plus" @click="router.push('/groups/new')">新增群組</el-button>
+      </div>
+    </div>
+    <el-card v-liquid-glass shadow="never">
+    <div class="toolbar filters">
       <el-input v-model="filters.name" placeholder="名稱篩選" clearable style="width: 160px" @change="reloadFromFirstPage" @clear="reloadFromFirstPage" />
       <el-select v-model="filters.status" placeholder="狀態篩選" clearable style="width: 140px" @change="reloadFromFirstPage">
         <el-option label="啟用" value="enabled" />
         <el-option label="停用" value="disabled" />
       </el-select>
-      <IconButton :icon="Plus" label="新增群組" type="primary" @click="router.push('/groups/new')" />
-      <IconButton :icon="Refresh" label="重新整理" :loading="loading" @click="load" />
     </div>
 
     <el-table :data="groups" style="width: 100%" @sort-change="handleSortChange">
@@ -129,12 +118,8 @@ async function handleDelete(group: TaskGroup) {
       <el-table-column prop="description" label="描述" />
       <el-table-column label="狀態" prop="status" width="140" sortable="custom">
         <template #default="{ row }">
-          <el-switch
+          <StatusSwitch
             :model-value="row.status"
-            active-value="enabled"
-            inactive-value="disabled"
-            active-text="啟用"
-            inactive-text="停用"
             :loading="statusUpdatingIds.has(row.id)"
             @change="(val: Status) => handleStatusChange(row, val)"
           />
@@ -156,14 +141,8 @@ async function handleDelete(group: TaskGroup) {
       :page-size="pageSize"
       :total="total"
       layout="prev, pager, next"
-      style="margin-top: 16px"
-      @current-change="load"
+      @current-change="() => load()"
     />
-  </el-card>
+    </el-card>
+  </div>
 </template>
-
-<style scoped>
-.toolbar {
-  margin-bottom: 16px;
-}
-</style>

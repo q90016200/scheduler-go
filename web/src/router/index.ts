@@ -8,7 +8,7 @@ const routes = [
   {
     path: '/tasks/:id/executions',
     name: 'task-executions',
-    component: () => import('../views/TaskExecutionHistoryView.vue'),
+    component: () => import('../views/AllExecutionsView.vue'),
     props: true,
   },
   { path: '/tasks/:id', name: 'task-detail', component: () => import('../views/TaskDetailView.vue'), props: true },

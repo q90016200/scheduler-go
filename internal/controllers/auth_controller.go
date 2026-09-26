@@ -6,6 +6,7 @@ import (
 	"github.com/q90016200/scheduler-go/config"
 	"github.com/q90016200/scheduler-go/internal/app"
 	"github.com/q90016200/scheduler-go/internal/auth"
+	"github.com/q90016200/scheduler-go/internal/models"
 	"github.com/q90016200/scheduler-go/internal/services"
 	"github.com/q90016200/scheduler-go/pkg/response"
 	"gorm.io/gorm"
@@ -30,7 +31,8 @@ func (ctrl *AuthController) RegisterHandler(c *gin.Context) {
 		return
 	}
 
-	if err := ctrl.services.AuthService.Register(input.UserName, input.Password); err != nil {
+	_, err := ctrl.services.UserService.CreateUser(models.CreateUserReq{UserName: input.UserName, Password: input.Password})
+	if err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			response.Fail(c, http.StatusConflict, "用户名已存在", nil)
 			return
@@ -94,12 +96,11 @@ func (ctrl *AuthController) MeHandler(c *gin.Context) {
 		return
 	}
 
-	user, err := ctrl.services.AuthService.GetUserByID(userID.(string))
+	user, err := ctrl.services.UserService.GetUser(userID.(string))
 	if err != nil {
 		response.Fail(c, http.StatusNotFound, "使用者不存在", nil)
 		return
 	}
 
-	user.Password = "" // 不將密碼雜湊回傳給前端
 	response.Success(c, user, "成功")
 }

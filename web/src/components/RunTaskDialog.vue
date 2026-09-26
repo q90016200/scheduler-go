@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { cancelRunTask, runTask } from '../api/tasks'
 import { listExecutionLogs } from '../api/executionLogs'
@@ -9,9 +9,7 @@ import type { ExecutionLog, Task } from '../types'
 const props = defineProps<{ visible: boolean; task?: Task }>()
 const emit = defineEmits<{ 'update:visible': [boolean] }>()
 
-type Stage = 'form' | 'progress'
-
-const stage = ref<Stage>('form')
+const stage = ref<'form' | 'progress'>('form')
 const submitting = ref(false)
 const cancelling = ref(false)
 const finished = ref(false)
@@ -27,28 +25,9 @@ let deadline = 0
 let unmounted = false
 
 function stopPolling() {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = undefined
-  }
+  clearInterval(pollTimer)
+  pollTimer = undefined
 }
-
-function resetDialog() {
-  stopPolling()
-  stage.value = 'form'
-  logs.value = []
-  finished.value = false
-  timedOut.value = false
-  form.repeat = 1
-  form.intervalMs = 1000
-}
-
-watch(
-  () => props.visible,
-  (visible) => {
-    if (!visible) resetDialog()
-  },
-)
 
 onBeforeUnmount(() => {
   unmounted = true
@@ -132,14 +111,10 @@ async function handleCancelBatch() {
     cancelling.value = false
   }
 }
-
-function handleClose() {
-  emit('update:visible', false)
-}
 </script>
 
 <template>
-  <el-dialog :model-value="visible" title="立即執行" width="600px" append-to-body @update:model-value="emit('update:visible', $event)" @close="resetDialog">
+  <el-dialog :model-value="visible" :title="task ? `立即執行：${task.name} #${task.id.slice(-6)}` : '立即執行'" width="600px" append-to-body @update:model-value="emit('update:visible', $event)">
     <template v-if="stage === 'form'">
       <el-form label-width="100px">
         <el-form-item label="重複次數">
@@ -165,12 +140,12 @@ function handleClose() {
 
     <template #footer>
       <template v-if="stage === 'form'">
-        <el-button @click="handleClose">取消</el-button>
+        <el-button @click="emit('update:visible', false)">取消</el-button>
         <el-button type="primary" :loading="submitting" @click="handleSubmit">立即執行</el-button>
       </template>
       <template v-else>
         <el-button v-if="!finished" type="danger" :loading="cancelling" @click="handleCancelBatch">取消批次</el-button>
-        <el-button type="primary" @click="handleClose">關閉</el-button>
+        <el-button type="primary" @click="emit('update:visible', false)">關閉</el-button>
       </template>
     </template>
   </el-dialog>

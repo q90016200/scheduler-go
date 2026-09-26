@@ -12,20 +12,12 @@ watch(autoRefreshEnabled, (enabled) => {
 export function useAutoRefresh(loadFn: () => unknown, intervalMs: number) {
   let timer: ReturnType<typeof setInterval> | undefined
 
-  function stop() {
-    if (timer) {
-      clearInterval(timer)
-      timer = undefined
-    }
-  }
-
   function start() {
-    stop()
-    if (!autoRefreshEnabled.value) return
-    timer = setInterval(loadFn, intervalMs)
+    clearInterval(timer)
+    if (autoRefreshEnabled.value) timer = setInterval(loadFn, intervalMs)
   }
 
   start()
   watch(autoRefreshEnabled, start)
-  onBeforeUnmount(stop)
+  onBeforeUnmount(() => clearInterval(timer))
 }

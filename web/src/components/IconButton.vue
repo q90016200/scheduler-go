@@ -1,17 +1,12 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
 
-withDefaults(
-  defineProps<{
-    icon: Component
-    label: string
-    type?: 'primary' | 'success' | 'warning' | 'danger' | 'info'
-    size?: 'small' | 'default' | 'large'
-    loading?: boolean
-    disabled?: boolean
-  }>(),
-  { size: 'small' },
-)
+defineProps<{
+  icon: Component
+  label: string
+  type?: 'primary' | 'success' | 'warning' | 'danger' | 'info'
+  loading?: boolean
+}>()
 
 defineEmits<{ click: [MouseEvent] }>()
 </script>
@@ -22,9 +17,8 @@ defineEmits<{ click: [MouseEvent] }>()
       circle
       :icon="icon"
       :type="type"
-      :size="size"
+      size="small"
       :loading="loading"
-      :disabled="disabled"
       :aria-label="label"
       @click="$emit('click', $event)"
     />
