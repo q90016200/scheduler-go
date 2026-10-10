@@ -27,8 +27,7 @@ func (ctrl *UserController) ListUsersHandler(c *gin.Context) {
 
 	users, total, err := ctrl.services.UserService.ListUsers(name, limit, offset)
 	if err != nil {
-		logger.WithTrace(c).Error(err.Error())
-		response.Fail(c, http.StatusInternalServerError, "取得使用者清單失敗", nil)
+		failErr(c, err, "", "取得使用者清單失敗")
 		return
 	}
 

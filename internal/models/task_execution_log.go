@@ -8,16 +8,17 @@ type TaskExecutionLog struct {
 	ID         string `json:"id" gorm:"column:id;primaryKey;size:20"`
 	TaskID     string `json:"task_id" gorm:"column:task_id;size:20;index"`
 	Status     string `json:"status" gorm:"column:status;size:10"` // 'success', 'failed'
-	StartedAt  int64  `json:"started_at" gorm:"column:started_at"`
+	StartedAt  int64  `json:"started_at" gorm:"column:started_at;index"`
 	FinishedAt int64  `json:"finished_at" gorm:"column:finished_at"`
 	Output     string `json:"output" gorm:"column:output;type:jsonb"`
 	ErrMessage string `json:"error_message" gorm:"column:error_message"`
-	CreatedAt  int64  `json:"created_at" gorm:"column:created_at;autoCreateTime;<-:create"`
+	CreatedAt  int64  `json:"created_at" gorm:"column:created_at;autoCreateTime;<-:create;index;index:idx_exec_logs_stats,priority:3"`
 	Task       *Task  `json:"task,omitempty" gorm:"foreignKey:TaskID;references:ID;constraint:OnDelete:CASCADE"`
 
-	Source         string `json:"source" gorm:"column:source;size:10"`             // "cron" / "manual"
-	AttemptNumber  int    `json:"attempt_number" gorm:"column:attempt_number"`     // 第幾次嘗試，第一次是 1
-	IsFinalAttempt bool   `json:"is_final_attempt" gorm:"column:is_final_attempt"` // 這次觸發（含所有重試）的最後一筆記錄
+	Source         string `json:"source" gorm:"column:source;size:10;index:idx_exec_logs_stats,priority:1"`             // "cron" / "manual"
+	BatchID        string `json:"batch_id" gorm:"column:batch_id;size:20;index"`                                        // 「立即執行」批次 id，cron 來源為空字串
+	AttemptNumber  int    `json:"attempt_number" gorm:"column:attempt_number"`                                          // 第幾次嘗試，第一次是 1
+	IsFinalAttempt bool   `json:"is_final_attempt" gorm:"column:is_final_attempt;index:idx_exec_logs_stats,priority:2"` // 這次觸發（含所有重試）的最後一筆記錄
 }
 
 const (

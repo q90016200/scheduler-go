@@ -30,6 +30,16 @@ type NotifyConfig struct {
 	SlackWebhookURL  string
 }
 
+// TelegramConfigured 必要欄位皆有值才視為啟用
+func (n NotifyConfig) TelegramConfigured() bool {
+	return n.TelegramBotToken != "" && n.TelegramChatID != ""
+}
+
+// SlackConfigured webhook 有值才視為啟用
+func (n NotifyConfig) SlackConfigured() bool {
+	return n.SlackWebhookURL != ""
+}
+
 // PostgresConfig PostgreSQL 配置
 type PostgresConfig struct {
 	Username               string

@@ -1,5 +1,5 @@
 import http from './client'
-import type { ListTasksResult, NotifyConfig, RunTaskParams, SortField, SortOrder, Status, Task, TaskStats, TaskWriteDTO } from '../types'
+import type { ListTasksResult, NotifyConfig, RunBatch, RunTaskParams, RunTaskResult, SortField, SortOrder, Status, Task, TaskStats, TaskWriteDTO } from '../types'
 
 export const listTasks = (params?: {
   status?: string
@@ -22,7 +22,9 @@ export const updateTaskStatus = (id: string, status: Status, userId: string) =>
 
 export const deleteTask = (id: string) => http.delete<unknown, void>(`/tasks/${id}`)
 
-export const runTask = (id: string, params: RunTaskParams) => http.post<unknown, void>(`/tasks/${id}/run`, params)
+export const runTask = (id: string, params: RunTaskParams) => http.post<unknown, RunTaskResult>(`/tasks/${id}/run`, params)
+
+export const getRunBatch = (taskId: string, batchId: string) => http.get<unknown, RunBatch>(`/tasks/${taskId}/run/${batchId}`)
 
 export const cancelRunTask = (id: string) => http.delete<unknown, void>(`/tasks/${id}/run`)
 

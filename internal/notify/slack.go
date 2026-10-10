@@ -11,10 +11,11 @@ import (
 )
 
 func sendSlack(ctx context.Context, msg Message) error {
-	webhookURL := config.AppConfig.NotifyConfig.SlackWebhookURL
-	if webhookURL == "" {
+	cfg := config.AppConfig.NotifyConfig
+	if !cfg.SlackConfigured() {
 		return nil
 	}
+	webhookURL := cfg.SlackWebhookURL
 
 	text := fmt.Sprintf("任務失敗：*%s*\n時間：%s\n錯誤：%s", msg.TaskName, msg.FailedAt.Format("2006-01-02 15:04:05"), msg.ErrMessage)
 	body, err := json.Marshal(map[string]string{"text": text})

@@ -11,7 +11,7 @@ import (
 
 func sendTelegram(ctx context.Context, msg Message) error {
 	cfg := config.AppConfig.NotifyConfig
-	if cfg.TelegramBotToken == "" || cfg.TelegramChatID == "" {
+	if !cfg.TelegramConfigured() {
 		return nil
 	}
 

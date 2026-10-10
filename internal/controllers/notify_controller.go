@@ -17,7 +17,7 @@ func NewNotifyController() *NotifyController {
 func (ctrl *NotifyController) GetNotifyConfigHandler(c *gin.Context) {
 	nc := config.AppConfig.NotifyConfig
 	response.Success(c, gin.H{
-		"telegram_configured": nc.TelegramBotToken != "" && nc.TelegramChatID != "",
-		"slack_configured":    nc.SlackWebhookURL != "",
+		"telegram_configured": nc.TelegramConfigured(),
+		"slack_configured":    nc.SlackConfigured(),
 	}, "成功獲取通知設定狀態")
 }

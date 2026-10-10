@@ -2,8 +2,10 @@ package notify
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/q90016200/scheduler-go/internal/models"
@@ -45,7 +47,13 @@ func sendOne(ctx context.Context, name string, send func(ctx context.Context, ms
 func do(req *http.Request, label string) error {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		// *url.Error 的 Error() 含完整 URL（telegram bot token、slack webhook 皆為密鑰），
+		// 只保留底層錯誤，避免 sendOne 的 WithError 把密鑰寫進 log
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			return fmt.Errorf("%s 請求失敗: %w", label, ue.Err)
+		}
+		return fmt.Errorf("%s 請求失敗: %w", label, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {

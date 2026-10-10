@@ -70,10 +70,15 @@ async function handleStatusChange(user: User, status: Status) {
 }
 
 async function handleDelete(user: User) {
-  await ElMessageBox.confirm(`確定刪除使用者「${user.user_name}」？`, '刪除使用者', { type: 'warning' })
-  await deleteUser(user.id)
-  ElMessage.success('已刪除')
-  load()
+  try {
+    await ElMessageBox.confirm(`確定刪除使用者「${user.user_name}」？`, '刪除使用者', { type: 'warning' })
+    await deleteUser(user.id)
+    ElMessage.success('已刪除')
+    load()
+  } catch (err) {
+    if (err === 'cancel' || err === 'close') return
+    ElMessage.error((err as Error).message || '刪除使用者失敗')
+  }
 }
 </script>
 

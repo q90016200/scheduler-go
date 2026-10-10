@@ -12,9 +12,15 @@ RUN npm run build
 FROM golang:1.27.1-alpine AS go
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/server . \
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+# 只複製 Go 需要的路徑，前端/文件變動不會讓 Go 重編
+COPY main.go ./
+COPY cmd/ cmd/
+COPY config/ config/
+COPY internal/ internal/
+COPY pkg/ pkg/
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/server . \
  && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/migrate ./cmd/migrate
 
 # ---- 執行 ----

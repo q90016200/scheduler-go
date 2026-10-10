@@ -39,7 +39,8 @@ func SetupRouter(r *gin.Engine, services *app.AppServices, db *gorm.DB) *gin.Eng
 	})
 
 	api := r.Group("/api")
-	taskRoutes := api.Group("/tasks").Use(tracing)
+	api.Use(tracing)
+	taskRoutes := api.Group("/tasks")
 	{
 		taskRoutes.GET("/", taskController.ListTasksHandler)
 		taskRoutes.GET("/:id", taskController.GetTaskHandler)
@@ -49,6 +50,7 @@ func SetupRouter(r *gin.Engine, services *app.AppServices, db *gorm.DB) *gin.Eng
 		taskRoutes.PATCH("/:id/status", taskController.UpdateTaskStatusHandler)
 		taskRoutes.POST("/:id/run", taskController.RunTaskHandler)
 		taskRoutes.DELETE("/:id/run", taskController.CancelTaskRunHandler)
+		taskRoutes.GET("/:id/run/:batch_id", taskController.GetRunBatchHandler)
 
 		taskRoutes.GET("/group/", taskController.ListTaskGroupsHandler)
 		taskRoutes.GET("/group/:id", taskController.GetTaskGroupHandler)
@@ -62,7 +64,7 @@ func SetupRouter(r *gin.Engine, services *app.AppServices, db *gorm.DB) *gin.Eng
 	}
 
 	// 用戶驗證路由
-	authRoutes := api.Group("/auth").Use(tracing)
+	authRoutes := api.Group("/auth")
 	{
 		authRoutes.POST("/register", authController.RegisterHandler)
 		authRoutes.POST("/login", authController.LoginHandler)
@@ -70,18 +72,18 @@ func SetupRouter(r *gin.Engine, services *app.AppServices, db *gorm.DB) *gin.Eng
 		authRoutes.GET("/me", authController.MeHandler)
 	}
 
-	dashboardRoutes := api.Group("/dashboard").Use(tracing)
+	dashboardRoutes := api.Group("/dashboard")
 	{
 		dashboardRoutes.GET("/stats", execLogController.GetDashboardStatsHandler)
 	}
 
-	notifyRoutes := api.Group("/notify").Use(tracing)
+	notifyRoutes := api.Group("/notify")
 	{
 		notifyRoutes.GET("/config", notifyController.GetNotifyConfigHandler)
 	}
 
 	// 使用者管理路由
-	userRoutes := api.Group("/users").Use(tracing)
+	userRoutes := api.Group("/users")
 	{
 		userRoutes.GET("/", userController.ListUsersHandler)
 		userRoutes.GET("/:id", userController.GetUserHandler)

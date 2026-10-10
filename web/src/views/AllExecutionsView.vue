@@ -5,7 +5,7 @@ import { Back, Refresh } from '@element-plus/icons-vue'
 import ExecutionLogTable from '../components/ExecutionLogTable.vue'
 import IconButton from '../components/IconButton.vue'
 import { listExecutionLogs } from '../api/executionLogs'
-import { listTaskGroups } from '../api/taskGroups'
+import { listAllTaskGroups } from '../api/taskGroups'
 import { getTask } from '../api/tasks'
 import { useAutoRefresh } from '../composables/useAutoRefresh'
 import { usePagedList } from '../composables/usePagedList'
@@ -50,8 +50,7 @@ async function loadForId() {
   if (props.id) {
     getTask(props.id).then((t) => (taskName.value = t.name))
   } else if (!groups.value.length) {
-    // ponytail: 下拉選單需要「全部群組」，用大 limit 取代真正的全量 API；群組數量大到 1000 筆時再改成搜尋式下拉
-    groups.value = (await listTaskGroups({ limit: 1000 })).groups
+    groups.value = await listAllTaskGroups()
   }
   page.value = 1
   await load()

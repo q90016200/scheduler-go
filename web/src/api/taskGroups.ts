@@ -10,7 +10,10 @@ export const listTaskGroups = (params?: {
   offset?: number
 }) => http.get<unknown, ListTaskGroupsResult>('/tasks/group/', { params })
 
-export const getTaskGroup = (id: string) => http.get<unknown, TaskGroup>(`/tasks/group/${id}`)
+// 下拉選單需要「全部群組」，用大 limit 取代真正的全量 API；群組數量大到 1000 筆時再改成搜尋式下拉
+export const listAllTaskGroups = async () => (await listTaskGroups({ limit: 1000 })).groups
+
+export const getTaskGroup =(id: string) => http.get<unknown, TaskGroup>(`/tasks/group/${id}`)
 
 export const createTaskGroup = (payload: TaskGroupWriteDTO) => http.post<unknown, TaskGroup>('/tasks/group', payload)
 

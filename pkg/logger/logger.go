@@ -127,9 +127,14 @@ func Init(logFilePath string) *logrus.Logger {
 		Compress:   true,
 	}
 
-	// stdout：彩色人類可讀格式；檔案：JSON（透過 hook），兩者分流避免 ANSI 碼寫進檔案
+	// stdout：開發環境用彩色人類可讀格式，其餘（容器 log 收集）用 JSON 避免 ANSI 跳脫碼；
+	// 檔案：JSON（透過 hook），兩者分流避免 ANSI 碼寫進檔案
 	Log.SetOutput(os.Stdout)
-	Log.SetFormatter(&LogFormatter{})
+	if config.AppConfig.IsDevelopment() {
+		Log.SetFormatter(&LogFormatter{})
+	} else {
+		Log.SetFormatter(&logrus.JSONFormatter{})
+	}
 	Log.AddHook(&fileHook{writer: logFile, formatter: &logrus.JSONFormatter{}})
 
 	// 啟用 Caller 報告，開啟回傳函數名稱和行號

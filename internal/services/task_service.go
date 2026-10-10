@@ -8,6 +8,7 @@ import (
 	"github.com/rs/xid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"slices"
 )
 
 type TaskService struct {
@@ -81,10 +82,8 @@ func (s *TaskService) ListTasks(status, groupID, name, sortField, sortOrder stri
 	if err != nil {
 		return nil, 0, err
 	}
-	for i := range tasks {
-		decorateNextRunAt(s.cronScheduler, &tasks[i])
-	}
-	return tasks, total, err
+	s.decorateNextRunAt(tasks)
+	return tasks, total, nil
 }
 
 // GetTask 取得單一任務
@@ -93,19 +92,25 @@ func (s *TaskService) GetTask(id string) (*models.Task, error) {
 	if err := s.db.Preload("Group").First(&task, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
-	decorateNextRunAt(s.cronScheduler, &task)
-	return &task, nil
+	one := []models.Task{task}
+	s.decorateNextRunAt(one)
+	return &one[0], nil
 }
 
-// decorateNextRunAt 從記憶體中的 cron entry 查下次執行時間裝飾進 Task；
+// decorateNextRunAt 一次從記憶體中的 cron entry 查整批任務的下次執行時間裝飾進 Task；
 // 未掛上 cron job（未啟用、或註冊失敗）的任務保持 nil，前端顯示「-」
-func decorateNextRunAt(cs *scheduler.CronScheduler, task *models.Task) {
-	next, ok := scheduler.NextRunAt(cs, task.ID)
-	if !ok {
-		return
+func (s *TaskService) decorateNextRunAt(tasks []models.Task) {
+	ids := make([]string, len(tasks))
+	for i := range tasks {
+		ids[i] = tasks[i].ID
 	}
-	unix := next.Unix()
-	task.NextRunAt = &unix
+	nexts := scheduler.NextRunAts(s.cronScheduler, ids)
+	for i := range tasks {
+		if next, ok := nexts[tasks[i].ID]; ok {
+			unix := next.Unix()
+			tasks[i].NextRunAt = &unix
+		}
+	}
 }
 
 // taskFromReq 把 CreateTaskReq/UpdateTaskReq（同一型別）映射進 *models.Task，並套用
@@ -134,7 +139,7 @@ func taskFromReq(id string, input models.CreateTaskReq) *models.Task {
 		NotifySlack:         input.NotifySlack,
 	}
 	if task.TimeoutSeconds == 0 {
-		task.TimeoutSeconds = 10
+		task.TimeoutSeconds = models.DefaultTimeoutSeconds
 	}
 	if task.Headers == "" {
 		task.Headers = "{}"
@@ -150,15 +155,13 @@ func (s *TaskService) CreateTask(input models.CreateTaskReq) (*models.Task, erro
 		return nil, err
 	}
 
-	// 當是執行的放入 syncMap 內，供排程取得目前可執行 task 清單
-	if task.Status == models.STATUS_ENABLED {
-		if err := scheduler.RegisterTaskJob(s.cronScheduler, task); err != nil {
-			// 註冊排程失敗，不留下無法排程的孤兒資料
-			if delErr := s.db.Delete(&models.Task{}, "id = ?", task.ID).Error; delErr != nil {
-				logger.Log.Errorf("task id: %s, 註冊排程失敗後清理孤兒資料也失敗: %v", task.ID, delErr)
-			}
-			return nil, err
+	// 依 DB 狀態同步排程（enabled 才會註冊）
+	if err := scheduler.SyncTask(s.cronScheduler, task.ID); err != nil {
+		// 同步排程失敗，不留下無法排程的孤兒資料
+		if delErr := s.db.Delete(&models.Task{}, "id = ?", task.ID).Error; delErr != nil {
+			logger.Log.Errorf("task id: %s, 同步排程失敗後清理孤兒資料也失敗: %v", task.ID, delErr)
 		}
+		return nil, err
 	}
 
 	return task, nil
@@ -174,7 +177,12 @@ var taskUpdatableColumns = []string{
 func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models.Task, error) {
 	task := taskFromReq(id, input)
 
-	result := s.db.Model(&models.Task{}).Where("id = ?", id).Select(taskUpdatableColumns).Updates(task)
+	// status 省略（空字串）時不更新該欄、沿用 DB 現值；否則 Select 會把 "" 寫進去，接著 SyncTask 取消排程
+	cols := taskUpdatableColumns
+	if input.Status == "" {
+		cols = slices.DeleteFunc(slices.Clone(cols), func(c string) bool { return c == "status" })
+	}
+	result := s.db.Model(&models.Task{}).Where("id = ?", id).Select(cols).Updates(task)
 	if result.Error != nil {
 		return nil, fmt.Errorf("task: %T, db.Updates err: %v", task, result.Error)
 	}
@@ -182,17 +190,12 @@ func (s *TaskService) UpdateTask(id string, input models.UpdateTaskReq) (*models
 		return nil, gorm.ErrRecordNotFound
 	}
 
-	// 重新啟動排程任務
-	scheduler.UnregisterTaskJob(s.cronScheduler, id)
-	if task.Status == models.STATUS_ENABLED {
-		if err := scheduler.RegisterTaskJob(s.cronScheduler, task); err != nil {
-			errMsg := fmt.Sprintf("task: %T, RegisterTaskJob err: %v", task, err)
-			logger.Log.Error(errMsg)
-			return nil, err
-		}
+	if err := scheduler.SyncTask(s.cronScheduler, id); err != nil {
+		logger.Log.Errorf("task id: %s, SyncTask err: %v", id, err)
+		return nil, err
 	}
-
-	return task, nil
+	// 重讀 DB：task 是請求映射出來的，status／created_at／group 不準
+	return s.GetTask(id)
 }
 
 // UpdateTaskStatus 只切換任務啟用/停用狀態並對應 register/unregister cron job，
@@ -214,28 +217,32 @@ func (s *TaskService) UpdateTaskStatus(id, status, userId string) (*models.Task,
 	task.Status = status
 	task.UpdatedBy = userId
 
-	scheduler.UnregisterTaskJob(s.cronScheduler, id)
-	if status == models.STATUS_ENABLED {
-		if err := scheduler.RegisterTaskJob(s.cronScheduler, &task); err != nil {
-			errMsg := fmt.Sprintf("task: %T, RegisterTaskJob err: %v", task, err)
-			logger.Log.Error(errMsg)
-			return nil, err
-		}
+	if err := scheduler.SyncTask(s.cronScheduler, id); err != nil {
+		logger.Log.Errorf("task id: %s, SyncTask err: %v", id, err)
+		return nil, err
 	}
-
 	return &task, nil
 }
 
-// RunTaskNow 立即執行任務 repeat 次（間隔 intervalMs 毫秒），不受排程狀態影響，非同步執行後立刻回傳
-func (s *TaskService) RunTaskNow(id string, repeat, intervalMs int) (*models.Task, error) {
+// RunTaskNow 立即執行任務 repeat 次（間隔 intervalMs 毫秒），不受排程狀態影響，非同步執行後立刻回傳該批次的 batch id
+func (s *TaskService) RunTaskNow(id string, repeat, intervalMs int) (string, error) {
 	task, err := s.GetTask(id)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	if err := scheduler.RunTaskNow(s.cronScheduler, task, repeat, intervalMs); err != nil {
-		return nil, err
-	}
-	return task, nil
+	return scheduler.RunTaskNow(s.cronScheduler, task, repeat, intervalMs)
+}
+
+// GetRunBatch 查詢「立即執行」批次的進度：running 表示批次是否仍在跑，logs 為該批次目前已寫入的紀錄（依開始時間升冪）。
+// 順序不能反：必須先判斷 running 再查 logs。批次 goroutine 在所有紀錄都同步寫入完成後才會從排程器的 registry 消失，
+// 所以先讀到 running=false 之後再查，logs 一定完整；若反過來先查 logs 再問 running，
+// 可能在兩者之間又寫入了最後幾筆，造成「已完成但 logs 缺漏」。
+func (s *TaskService) GetRunBatch(taskID, batchID string) (running bool, logs []models.TaskExecutionLog, err error) {
+	running = scheduler.IsBatchRunning(s.cronScheduler, taskID, batchID)
+	logs = []models.TaskExecutionLog{}
+	err = s.db.Where("task_id = ? AND batch_id = ?", taskID, batchID).
+		Order("started_at ASC, id ASC").Find(&logs).Error
+	return running, logs, err
 }
 
 // CancelRunNow 取消任務目前進行中的「立即執行」重複批次
@@ -253,7 +260,7 @@ func (s *TaskService) DeleteTask(id string) error {
 		return gorm.ErrRecordNotFound
 	}
 
-	scheduler.UnregisterTaskJob(s.cronScheduler, id)
+	s.syncTasks([]string{id})
 
 	return nil
 }
@@ -311,7 +318,7 @@ func (s *TaskService) CreateTaskGroup(input models.CreateTaskGroupReq) (*models.
 // 回傳被停用的任務清單（供呼叫端在交易 commit 後取消其 cron 排程）。
 // 用單一 UPDATE ... RETURNING 而不是先 Find 再 Update：兩條敘述之間若有任務被別的請求改成
 // enabled，Find-then-Update 會漏抓到它（UPDATE 仍會把它一併停用，但不會出現在回傳清單裡，
-// 就永遠不會呼叫 UnregisterTaskJob）。RETURNING 讓「哪些列被改」跟「改成什麼」在同一個敘述完成。
+// 就永遠不會被 SyncTask 同步）。RETURNING 讓「哪些列被改」跟「改成什麼」在同一個敘述完成。
 func (s *TaskService) deactivateGroupTasksTx(tx *gorm.DB, groupID string) ([]models.Task, error) {
 	var tasks []models.Task
 	err := tx.Model(&tasks).
@@ -324,10 +331,10 @@ func (s *TaskService) deactivateGroupTasksTx(tx *gorm.DB, groupID string) ([]mod
 	return tasks, nil
 }
 
-// unregisterTasks 取消一批任務的 cron 排程（純記憶體操作，於交易 commit 後呼叫）
-func (s *TaskService) unregisterTasks(tasks []models.Task) {
-	for _, task := range tasks {
-		scheduler.UnregisterTaskJob(s.cronScheduler, task.ID)
+// syncTasks 在 DB commit 之後一次同步一批任務的 cron 排程；失敗只記 log（DB 已是正確狀態，poller 會再補）
+func (s *TaskService) syncTasks(ids []string) {
+	if err := scheduler.SyncTasks(s.cronScheduler, ids); err != nil {
+		logger.Log.Errorf("task ids: %v, SyncTasks err: %v", ids, err)
 	}
 }
 
@@ -342,8 +349,13 @@ func (s *TaskService) UpdateTaskGroup(id string, input models.UpdateTaskGroupReq
 
 	var deactivated []models.Task
 	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// status 省略（空字串）時不更新該欄、沿用 DB 現值，理由同 UpdateTask
+		cols := []string{"name", "description", "updated_by"}
+		if input.Status != "" {
+			cols = append(cols, "status")
+		}
 		result := tx.Model(&models.TaskGroup{}).Where("id = ?", id).
-			Select("name", "description", "status", "updated_by").
+			Select(cols).
 			Updates(group)
 		if result.Error != nil {
 			return result.Error
@@ -366,9 +378,14 @@ func (s *TaskService) UpdateTaskGroup(id string, input models.UpdateTaskGroupReq
 		return nil, fmt.Errorf("task group: %T, update err: %w", group, err)
 	}
 
-	s.unregisterTasks(deactivated)
+	ids := make([]string, len(deactivated))
+	for i, t := range deactivated {
+		ids[i] = t.ID
+	}
+	s.syncTasks(ids)
 
-	return group, nil
+	// 重讀 DB，回應才反映沿用的 status／created_at 等現值
+	return s.GetTaskGroup(id)
 }
 
 // DeleteTaskGroup 刪除群組前連動停用底下仍為 active 的任務並取消其排程，
@@ -395,7 +412,11 @@ func (s *TaskService) DeleteTaskGroup(id string) ([]models.Task, error) {
 		return nil, fmt.Errorf("task group id: %s, delete err: %w", id, err)
 	}
 
-	s.unregisterTasks(deactivated)
+	ids := make([]string, len(deactivated))
+	for i, t := range deactivated {
+		ids[i] = t.ID
+	}
+	s.syncTasks(ids)
 
 	return deactivated, nil
 }

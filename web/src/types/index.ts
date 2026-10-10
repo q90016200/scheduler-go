@@ -112,6 +112,7 @@ export interface ExecutionLog {
   created_at: number
   task?: Task
   source: ExecutionSource
+  batch_id: string
   attempt_number: number
   is_final_attempt: boolean
 }
@@ -129,6 +130,19 @@ export interface DeleteTaskGroupResult {
 export interface RunTaskParams {
   repeat: number
   interval_ms: number
+}
+
+export interface RunTaskResult {
+  task_id: string
+  repeat: number
+  interval_ms: number
+  batch_id: string
+}
+
+export interface RunBatch {
+  batch_id: string
+  running: boolean
+  logs: ExecutionLog[]
 }
 
 export type UserWriteDTO = {

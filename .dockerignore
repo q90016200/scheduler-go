@@ -9,3 +9,4 @@ bin
 docker
 web/node_modules
 web/dist
+.env.*

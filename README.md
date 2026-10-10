@@ -1,6 +1,6 @@
 專案資料夾結構
 ```plaintext
-scheduler-tool/
+schdule-go/
 ├── cmd/
 │   └── migrate/            # 資料庫遷移工具 (go run cmd/migrate/migrate.go)
 │       └── migrate.go
@@ -25,7 +25,8 @@ scheduler-tool/
 │   ├── models/             # 資料結構和資料庫模型
 │   │   ├── user.go
 │   │   ├── task.go                # 任務、群組模型
-│   │   └── task_execution_log.go  # 任務執行紀錄模型
+│   │   ├── task_execution_log.go  # 任務執行紀錄模型
+│   │   └── validation.go          # 註冊 Task 的結構層級驗證（ValidateTaskMethod）
 │   ├── services/           # 業務邏輯層，直接操作 *gorm.DB（無獨立的 repositories 層）
 │   │   ├── auth_service.go
 │   │   ├── user_service.go            # 使用者管理服務
@@ -34,7 +35,7 @@ scheduler-tool/
 │   ├── scheduler/          # cron 排程器，執行 http/rpc 任務、記錄執行結果、清除過期紀錄
 │   │   ├── cron.go              # cron.Recover 防護、每分鐘 poller、SSRF 防護的 resty client
 │   │   └── jobs.go
-│   ├── notify/             # 失敗通知管道（telegram.go / slack.go），由 jobs.go 呼叫
+│   ├── notify/             # 失敗通知（notify.go 分派；telegram.go / slack.go），由 jobs.go 呼叫
 │   ├── ssrf/               # 任務執行連線的 SSRF 防護（ssrf.go，見下方「安全性」）
 │   ├── middleware/         # 中介軟體
 │   │   ├── auth_middleware.go
@@ -46,8 +47,12 @@ scheduler-tool/
 │   ├── response/           # API 回應封裝
 │   └── utils/              # 驗證器（validator.go）等公用工具
 ├── web/                    # Vue3 + TypeScript + Vite 前端（獨立專案，見下方「前端開發」）
-├── .env                    # 環境變數配置
+├── .dockerignore
+├── .env                    # 環境變數配置（本機，不進版控）
+├── .env.example            # 環境變數範本（cp 成 .env）
+├── Dockerfile              # 多階段建置映像
 ├── go.mod                  # Go modules 配置
+├── main.go                 # 服務進入點
 └── README.md               # 專案說明文件
 
 ```
@@ -87,7 +92,7 @@ scheduler-tool/
    go run main.go
    ```
 
-   監聽 `SERVER_PORT`（預設 `8080`）。啟動後 cron 排程器會每分鐘掃描 `status = enabled` 的任務並執行。
+   監聽 `.env` 的 `SERVER_PORT`（必填，`.env.example` 為 `8080`）。啟動後 cron 排程器會每分鐘掃描 `status = enabled` 的任務並執行。
 
 5. **啟動前端**
 
@@ -99,7 +104,7 @@ scheduler-tool/
    go test ./...
    ```
 
-   涵蓋 `internal/scheduler`（cron 註冊與排程、HTTP 成功/重試判定、立即執行）、`internal/ssrf`（SSRF 連線防護）與 `pkg/utils`（驗證器）。排程相關程式碼可另外用 `go test -race ./internal/scheduler/...` 檢查併發安全。
+   涵蓋 `internal/scheduler`（cron 註冊與排程、HTTP 成功/重試判定、立即執行）、`internal/ssrf`（SSRF 連線防護）、`internal/notify`（錯誤訊息不洩漏 token）、`internal/router`（路由註冊不衝突）與 `pkg/utils`（驗證器）。排程相關程式碼可另外用 `go test -race ./internal/scheduler/...` 檢查併發安全。
 
 ## Docker 部署
 
@@ -111,7 +116,16 @@ docker run --rm --env-file .env schedule-go ./migrate   # 遷移
 docker run -d -p 8080:8080 --env-file .env schedule-go   # 啟動
 ```
 
-`.env` 裡的 `POSTGRES_HOST` 要改成容器可達的位址（例如 `host.docker.internal`，而非 `127.0.0.1`）。映像內建 `HEALTHCHECK`，打 `GET /healthz`。
+部署前請調整 `.env`（`.env.example` 是本機開發值，不宜直接沿用）：
+
+- `APP_SECRET` 換成隨機字串，不要保留 `change-me-…`。
+- `APP_ENV=production`。`.env.example` 為 `development`，會讓 gin 維持 debug 模式並把 `LOG_LEVEL` 預設成 `debug`。
+- `POSTGRES_HOST` 要改成容器可達的位址：Docker Desktop 用 `host.docker.internal`；Linux 需加上 `--add-host=host.docker.internal:host-gateway`，不能用 `127.0.0.1`。
+- 要保留 `logs/app.log` 時掛載 volume：`-v $(pwd)/logs:/app/logs`（目錄需讓 uid `10001` 可寫），否則容器重建後日誌會消失。
+
+映像內建 `HEALTHCHECK`，打 `GET /healthz`。
+
+關機時會先中止並等待進行中的排程與立即執行批次（兩段各最長 10 秒），再關閉 HTTP 服務（最長 10 秒），最壞約 30 秒，總計可能超過 Docker 預設 10 秒的 stop 寬限：`docker run` 需加 `--stop-timeout 30`（compose 用 `stop_grace_period: 30s`）。
 
 ## 環境變數 (.env)
 
@@ -119,21 +133,22 @@ docker run -d -p 8080:8080 --env-file .env schedule-go   # 啟動
 |---|---|---|
 | `GIN_MODE` | Gin 執行模式（`debug`/`release`） | `debug` |
 | `APP_ENV` | 應用程式環境（`development`/production 等），影響預設 `LOG_LEVEL` | `development` |
-| `SERVER_PORT` | Gin 監聽埠 | - |
+| `SERVER_PORT` | Gin 監聽埠（必填） | - |
 | `SERVER_DOMAIN` | cookie 的 domain | - |
 | `APP_SECRET` | JWT 簽章金鑰。缺少會在啟動時 `log.Fatalf`，不會帶著空金鑰跑起來 | - |
-| `TOKEN_EXPIRY` | JWT/cookie 有效秒數 | - |
+| `TOKEN_EXPIRY` | JWT/cookie 有效秒數 | `604800`（7 天） |
 | `EXECUTION_LOG_RETENTION_DAYS` | 任務執行紀錄保留天數，超過會被每日排程清除 | `120` |
 | `SSRF_ALLOW_PRIVATE_TARGETS` | 設 `true` 時關閉任務執行的 SSRF 防護（連 loopback/metadata 位址都放行），僅供確實需要打 loopback 的情境使用 | `false` |
 | `TIMEZONE` | 應用時區（IANA 名稱）。cron 排程、資料庫連線 `TimeZone`、日誌時間戳（`time.Local`）都以此為準，不受主機/容器本機時區影響；無效值會在啟動時 `log.Fatalf`。單一任務可在排程前加 `CRON_TZ=` 覆寫，如 `CRON_TZ=Asia/Tokyo 0 9 * * *` | `Asia/Taipei` |
 | `LOG_LEVEL` | logrus 最低輸出等級（`debug`/`info`/`warn`/`error`...） | 開發環境 `debug`，其餘 `info` |
-| `POSTGRES_*` | PostgreSQL 連線資訊。任一項缺少同樣會在啟動時 `log.Fatalf` | - |
+| `POSTGRES_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_DATABASE` | PostgreSQL 連線資訊，必填；任一項缺少會在啟動時 `log.Fatalf` | - |
+| `POSTGRES_SSLMODE` / `_MAX_OPEN_CONNS` / `_MAX_IDLE_CONNS` / `_CONN_MAX_LIFETIME_MINUTES` | 選填 | `disable` / `25` / `5` / `60` |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 失敗通知的 Telegram 管道；任一項留空視為停用 | - |
 | `SLACK_WEBHOOK_URL` | 失敗通知的 Slack 管道（Incoming Webhook URL）；留空視為停用 | - |
 
 ## API 端點
 
-> **登入/註冊目前暫時停用**：`JWTAuthMiddleware` 未掛載在任何路由上，前端也拿掉了未登入導向 `/login` 的守衛，所有端點與頁面皆可直接使用，不需登入。以下「需登入」標註為停用前的原始設計，之後要恢復可參考 `internal/router/router.go`。
+> **登入/註冊目前暫時停用**：`JWTAuthMiddleware` 未掛載在任何路由上，前端也拿掉了未登入導向 `/login` 的守衛，所有端點與頁面皆可直接使用，不需登入。恢復登入時，在 `internal/router/router.go` 掛回 `JWTAuthMiddleware`，並還原前端的路由守衛（`web/src/router/index.ts`）。
 
 **錯誤回應格式**：所有回應皆為 `{code, message, data, error, trace}`。驗證失敗（400）時 `error` 為 `[{field, tag, param}]` 陣列，`field` 使用 JSON 欄位名（如 `endpoint`、`retry_count`），前端據此翻成中文欄位與錯誤訊息（`web/src/api/client.ts`）。
 
@@ -150,7 +165,8 @@ docker run -d -p 8080:8080 --env-file .env schedule-go   # 啟動
 - `GET /`（清單，可用 `status`/`group_id`/`name`（模糊比對）/`sort_field`/`sort_order`/`limit`/`offset` 查詢參數）；每筆任務會多帶 `next_run_at`（unix 秒，只有已啟用且成功掛上 cron job 的任務才有值，其餘為 `null`）
 - `GET /:id`、`POST /`、`PUT /:id`（整包更新，`name`/`schedule`/`type`/`endpoint` 皆為必填）、`DELETE /:id`
 - `PATCH /:id/status`（body 僅需 `{"status": "enabled"|"disabled", "user_id": "..."}`，只切換啟用狀態，不需送整包任務資料）
-- `POST /:id/run`（立即執行，不受排程狀態影響；非同步觸發，呼叫後立刻回傳）。body 可選帶 `{"repeat": 1-50, "interval_ms": 100-60000}` 指定重複執行次數與每次呼叫的間隔毫秒數，省略時預設執行 1 次；同一任務同時只允許一個進行中的重複批次，重複觸發會回 409。中途某次執行失敗不會中斷剩下的次數，每次執行都各自寫入一筆執行紀錄。立即執行（手動觸發）不套用失敗通知門檻計數，避免測試時誤觸發通知。
+- `POST /:id/run`（立即執行，不受排程狀態影響；非同步觸發，呼叫後立刻回傳）。body 可選帶 `{"repeat": 1-50, "interval_ms": 100-60000}` 指定重複執行次數與每次呼叫的間隔毫秒數，省略時預設執行 1 次；同一任務同時只允許一個進行中的重複批次，重複觸發會回 409。中途某次執行失敗不會中斷剩下的次數，每次執行都各自寫入一筆執行紀錄。立即執行（手動觸發）不套用失敗通知門檻計數，避免測試時誤觸發通知。回應帶 `batch_id`，該批次寫出的每筆執行紀錄都帶同一個 `batch_id`。
+- `GET /:id/run/:batch_id`（查詢立即執行批次進度：回 `{batch_id, running, logs}`；`running` 為 `false` 時 `logs` 保證已完整；不存在的 batch_id 回 `running=false`、`logs=[]`）
 - `DELETE /:id/run`（取消該任務目前進行中的重複批次；會立刻中斷正在進行中的那一發 HTTP/RPC 呼叫與剩餘的重試，不必等它自然逾時或重試跑完，中斷的那筆會記為失敗、錯誤訊息帶 `context canceled`；找不到進行中的批次回 404）
 - `GET /:id/stats`（單一任務執行儀表板小面板：近 30 天成功率 `success_rate_30d`、近 30 天平均耗時 `avg_duration_ms_30d`（毫秒）、最近 10 次中失敗次數 `recent_fail_count`；只採計排程自動觸發、且是該次觸發最終結果的紀錄，即時 SQL 聚合，不做快取）
 - 建立/更新時 `type` 限定 `http`/`rpc`、`schedule` 必須是合法的標準 cron 表達式，兩者驗證失敗會在寫入資料庫前被擋下（回 400），不會留下無法排程的孤兒資料。
@@ -166,6 +182,7 @@ docker run -d -p 8080:8080 --env-file .env schedule-go   # 啟動
 
 **執行紀錄**（`/api/tasks/logs`）：`GET /`（可用 `task_id`/`task_name`/`group_id` 篩選，`limit`/`offset` 分頁，回傳每筆會帶 `task.name`/`task.group.name`）、`GET /:id`（同樣帶 `task` 資訊）。刪除任務會連動刪除其執行紀錄（外鍵 `ON DELETE CASCADE`）。每筆紀錄多帶：
 - `source`（`cron`/`manual`，區分是排程自動觸發還是立即執行手動觸發）
+- `batch_id`（立即執行的批次 id；排程觸發為空字串。此欄位需先跑 `go run cmd/migrate/migrate.go` 才會存在，未遷移就啟動新版會導致執行紀錄寫入失敗）
 - `attempt_number`（第幾次嘗試，第一次是 1）、`is_final_attempt`（是否為這次觸發（含所有重試）的最後一筆；設有 `retry_count` 的任務失敗重試時，每次嘗試各存一筆，只有最後一筆會是 `true`）
 
 **失敗重試與通知**：任務失敗（網路錯誤/逾時/HTTP 5xx）時依 `retry_count`/`retry_delay_ms` 重試；HTTP 4xx 與參數格式錯誤（例如 method/payload 格式不對）視為不可重試，直接判定為這次觸發的最終結果。只有排程自動觸發（`source=cron`）的最終結果才會累加/清零任務的連續失敗次數：失敗 +1、成功清零；連續失敗次數剛好等於 `notify_fail_threshold` 的那一刻，依任務勾選的管道（Telegram/Slack）非同步發送一次通知，之後即使繼續失敗也靜音，直到成功一次重新累積才會再通知一次。通知發送失敗只記 log，不重試、不影響任務執行本身。

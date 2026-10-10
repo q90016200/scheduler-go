@@ -12,7 +12,7 @@ import StatusSwitch from '../components/StatusSwitch.vue'
 import { describeCron } from '../utils/cron'
 import { formatTime } from '../utils/time'
 import { createTask, deleteTask, listTasks, updateTask, updateTaskStatus } from '../api/tasks'
-import { listTaskGroups } from '../api/taskGroups'
+import { listAllTaskGroups } from '../api/taskGroups'
 import { useAuthStore } from '../stores/auth'
 import { useAutoRefresh } from '../composables/useAutoRefresh'
 import { usePagedList } from '../composables/usePagedList'
@@ -69,18 +69,23 @@ function rowClassName({ row }: { row: Task }) {
 useAutoRefresh(() => load(true), 120000)
 
 onMounted(async () => {
-  // ponytail: 下拉選單需要「全部群組」，用大 limit 取代真正的全量 API；群組數量大到 1000 筆時再改成搜尋式下拉
-  groups.value = (await listTaskGroups({ limit: 1000 })).groups
   const groupId = route.query.group_id
   if (typeof groupId === 'string' && groupId) filters.groupId = groupId
-  await load()
+  // 群組下拉與任務清單彼此獨立，並行載入
+  const [list] = await Promise.all([listAllTaskGroups(), load()])
+  groups.value = list
 })
 
 async function handleDelete(task: Task) {
-  await ElMessageBox.confirm(`確定刪除任務「${task.name}」？`, '刪除任務', { type: 'warning' })
-  await deleteTask(task.id)
-  ElMessage.success('已刪除')
-  load()
+  try {
+    await ElMessageBox.confirm(`確定刪除任務「${task.name}」？`, '刪除任務', { type: 'warning' })
+    await deleteTask(task.id)
+    ElMessage.success('已刪除')
+    load()
+  } catch (err) {
+    if (err === 'cancel' || err === 'close') return
+    ElMessage.error((err as Error).message || '刪除任務失敗')
+  }
 }
 
 async function handleStatusChange(task: Task, status: Status) {

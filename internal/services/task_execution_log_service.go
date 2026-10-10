@@ -45,15 +45,7 @@ func (s *TaskExecutionLogService) ListLogs(taskID, taskName, groupID, status, so
 		return nil, 0, err
 	}
 
-	order := "started_at DESC"
-	if listExecutionLogsSortableFields[sortField] {
-		dir := "ASC"
-		if sortOrder == "desc" {
-			dir = "DESC"
-		}
-		order = sortField + " " + dir
-	}
-
+	order := orderBy(listExecutionLogsSortableFields, sortField, sortOrder, "started_at DESC")
 	err := query.Preload("Task.Group").Order(order).Limit(limit).Offset(offset).Find(&logs).Error
 	return logs, total, err
 }

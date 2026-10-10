@@ -29,8 +29,7 @@ func (ctrl *TaskExecutionLogController) ListLogsHandler(c *gin.Context) {
 
 	logs, total, err := ctrl.services.TaskExecutionLogService.ListLogs(taskID, taskName, groupID, status, sortField, sortOrder, limit, offset)
 	if err != nil {
-		logger.WithTrace(c).Error(err.Error())
-		response.Fail(c, http.StatusInternalServerError, "取得執行紀錄失敗", nil)
+		failErr(c, err, "", "取得執行紀錄失敗")
 		return
 	}
 

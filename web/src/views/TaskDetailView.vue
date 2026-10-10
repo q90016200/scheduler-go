@@ -19,8 +19,9 @@ const stats = ref<TaskStats>()
 const runDialogVisible = ref(false)
 
 async function load() {
-  task.value = await getTask(props.id)
-  stats.value = await getTaskStats(props.id)
+  const [t, s] = await Promise.all([getTask(props.id), getTaskStats(props.id)])
+  task.value = t
+  stats.value = s
 }
 
 onMounted(load)

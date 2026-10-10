@@ -4,7 +4,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { Delete, Plus } from '@element-plus/icons-vue'
 import CronInput from './CronInput.vue'
 import StatusSwitch from './StatusSwitch.vue'
-import { listTaskGroups } from '../api/taskGroups'
+import { listAllTaskGroups } from '../api/taskGroups'
 import { getNotifyConfig } from '../api/tasks'
 import { useAuthStore } from '../stores/auth'
 import type { NotifyConfig, Task, TaskGroup, TaskWriteDTO } from '../types'
@@ -60,8 +60,7 @@ watch(
 )
 
 onMounted(async () => {
-  // ponytail: 下拉選單需要「全部群組」，用大 limit 取代真正的全量 API；群組數量大到 1000 筆時再改成搜尋式下拉
-  groups.value = (await listTaskGroups({ limit: 1000 })).groups
+  groups.value = await listAllTaskGroups()
   notifyConfig.value = await getNotifyConfig()
 })
 

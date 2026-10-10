@@ -4,6 +4,9 @@ package models
 const STATUS_ENABLED = "enabled"
 const STATUS_DISABLED = "disabled"
 
+// DefaultTimeoutSeconds 任務未設定逾時秒數時的預設值（需與 Task.TimeoutSeconds 的 gorm default 保持一致）
+const DefaultTimeoutSeconds = 10
+
 // Task 任務表 (tasks)
 type Task struct {
 	ID          string     `json:"id" gorm:"column:id;primaryKey;size:20"`

@@ -36,8 +36,7 @@ func (ctrl *TaskController) ListTasksHandler(c *gin.Context) {
 	// 調用 Service
 	tasks, total, err := ctrl.services.TaskServices.ListTasks(status, groupID, name, sortField, sortOrder, limit, offset)
 	if err != nil {
-		logger.WithTrace(c).Error(err.Error())
-		response.Fail(c, http.StatusInternalServerError, "取得任務清單失敗", nil)
+		failErr(c, err, "", "取得任務清單失敗")
 		return
 	}
 
@@ -140,7 +139,7 @@ func (ctrl *TaskController) RunTaskHandler(c *gin.Context) {
 		req.IntervalMs = 1000
 	}
 
-	task, err := ctrl.services.TaskServices.RunTaskNow(id, req.Repeat, req.IntervalMs)
+	batchID, err := ctrl.services.TaskServices.RunTaskNow(id, req.Repeat, req.IntervalMs)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.Fail(c, http.StatusNotFound, "任務不存在", nil)
@@ -155,7 +154,19 @@ func (ctrl *TaskController) RunTaskHandler(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, gin.H{"task_id": task.ID, "repeat": req.Repeat, "interval_ms": req.IntervalMs}, "已觸發執行")
+	response.Success(c, gin.H{"task_id": id, "repeat": req.Repeat, "interval_ms": req.IntervalMs, "batch_id": batchID}, "已觸發執行")
+}
+
+// GetRunBatchHandler 查詢「立即執行」批次進度：{batch_id, running, logs}；running=false 時 logs 保證完整。
+// 找不到的 batch_id（或不屬於該任務）不報 404，而是 running=false、logs 為空陣列
+func (ctrl *TaskController) GetRunBatchHandler(c *gin.Context) {
+	batchID := c.Param("batch_id")
+	running, logs, err := ctrl.services.TaskServices.GetRunBatch(c.Param("id"), batchID)
+	if err != nil {
+		failErr(c, err, "批次不存在", "查詢批次失敗")
+		return
+	}
+	response.Success(c, gin.H{"batch_id": batchID, "running": running, "logs": logs}, "查詢成功")
 }
 
 // CancelTaskRunHandler 取消任務目前進行中的「立即執行」重複批次
@@ -193,8 +204,7 @@ func (ctrl *TaskController) ListTaskGroupsHandler(c *gin.Context) {
 
 	groups, total, err := ctrl.services.TaskServices.ListTaskGroups(status, name, sortField, sortOrder, limit, offset)
 	if err != nil {
-		logger.WithTrace(c).Error(err.Error())
-		response.Fail(c, http.StatusInternalServerError, "取得任務群組清單失敗", nil)
+		failErr(c, err, "", "取得任務群組清單失敗")
 		return
 	}
 	response.Success(c, gin.H{"groups": groups, "total": total, "limit": limit, "offset": offset}, "成功獲取任務群組清單")
