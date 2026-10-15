@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from 'vue'
-import type { FormInstance, FormRules } from 'element-plus'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { Delete, Plus } from '@element-plus/icons-vue'
 import CronInput from './CronInput.vue'
 import StatusSwitch from './StatusSwitch.vue'
@@ -59,8 +59,14 @@ watch(
   },
 )
 
-onMounted(async () => {
-  ;[groups.value, notifyConfig.value] = await Promise.all([listAllTaskGroups(), getNotifyConfig()])
+// 兩支分開處理：通知設定只用來顯示警告，失敗不該連帶讓群組下拉選單變空
+onMounted(() => {
+  listAllTaskGroups()
+    .then((g) => (groups.value = g))
+    .catch((e: Error) => ElMessage.error(e.message))
+  getNotifyConfig()
+    .then((c) => (notifyConfig.value = c))
+    .catch(() => {})
 })
 
 const rules: FormRules<TaskWriteDTO> = {

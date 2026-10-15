@@ -71,7 +71,7 @@ func (ctrl *TaskController) CreateTaskHandler(c *gin.Context) {
 
 	task, err := ctrl.services.TaskServices.CreateTask(req)
 	if err != nil {
-		failErr(c, err, "任務不存在", "建立任務失敗")
+		failInternal(c, err, "建立任務失敗")
 		return
 	}
 
@@ -236,7 +236,7 @@ func (ctrl *TaskController) CreateTaskGroupHandler(c *gin.Context) {
 
 	task, err := ctrl.services.TaskServices.CreateTaskGroup(req)
 	if err != nil {
-		failErr(c, err, "任務群組不存在", "建立任務群組失敗")
+		failInternal(c, err, "建立任務群組失敗")
 		return
 	}
 

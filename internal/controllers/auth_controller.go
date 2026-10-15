@@ -24,8 +24,8 @@ func NewAuthController(services *app.AppServices) *AuthController {
 
 func (ctrl *AuthController) RegisterHandler(c *gin.Context) {
 	var input struct {
-		UserName string `json:"user_name" binding:"required"`
-		Password string `json:"password" binding:"required"`
+		UserName string `json:"user_name" validate:"required"`
+		Password string `json:"password" validate:"required"`
 	}
 	if !bindJSON(c, &input) {
 		return
@@ -37,7 +37,7 @@ func (ctrl *AuthController) RegisterHandler(c *gin.Context) {
 			response.Fail(c, http.StatusConflict, "用户名已存在", nil)
 			return
 		}
-		failErr(c, err, "使用者不存在", "註冊失敗")
+		failInternal(c, err, "註冊失敗")
 		return
 	}
 
@@ -46,8 +46,8 @@ func (ctrl *AuthController) RegisterHandler(c *gin.Context) {
 
 func (ctrl *AuthController) LoginHandler(c *gin.Context) {
 	var input struct {
-		UserName string `json:"user_name" binding:"required"`
-		Password string `json:"password" binding:"required"`
+		UserName string `json:"user_name" validate:"required"`
+		Password string `json:"password" validate:"required"`
 	}
 
 	if !bindJSON(c, &input) {
@@ -60,13 +60,17 @@ func (ctrl *AuthController) LoginHandler(c *gin.Context) {
 			response.Fail(c, http.StatusUnauthorized, "帳號已停用", nil)
 			return
 		}
-		response.Fail(c, http.StatusUnauthorized, "使用者名稱或密碼錯誤", nil)
+		if errors.Is(err, services.ErrInvalidCredentials) {
+			response.Fail(c, http.StatusUnauthorized, "使用者名稱或密碼錯誤", nil)
+			return
+		}
+		failInternal(c, err, "登入失敗")
 		return
 	}
 
 	token, err := auth.GenerateToken(user.ID)
 	if err != nil {
-		failErr(c, err, "", "無法生成 Token")
+		failInternal(c, err, "無法生成 Token")
 		return
 	}
 
@@ -97,7 +101,7 @@ func (ctrl *AuthController) MeHandler(c *gin.Context) {
 
 	user, err := ctrl.services.UserService.GetUser(userID.(string))
 	if err != nil {
-		response.Fail(c, http.StatusNotFound, "使用者不存在", nil)
+		failErr(c, err, "使用者不存在", "取得使用者失敗")
 		return
 	}
 

@@ -59,7 +59,7 @@ func (ctrl *UserController) CreateUserHandler(c *gin.Context) {
 			response.Fail(c, http.StatusConflict, "使用者名稱已存在", nil)
 			return
 		}
-		failErr(c, err, "使用者不存在", "建立使用者失敗")
+		failInternal(c, err, "建立使用者失敗")
 		return
 	}
 

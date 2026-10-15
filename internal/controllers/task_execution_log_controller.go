@@ -60,7 +60,7 @@ func (ctrl *TaskExecutionLogController) GetTaskStatsHandler(c *gin.Context) {
 func (ctrl *TaskExecutionLogController) GetDashboardStatsHandler(c *gin.Context) {
 	stats, err := ctrl.services.TaskExecutionLogService.GetDashboardStats()
 	if err != nil {
-		failErr(c, err, "資料不存在", "取得儀表板統計失敗")
+		failInternal(c, err, "取得儀表板統計失敗")
 		return
 	}
 

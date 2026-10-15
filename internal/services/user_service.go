@@ -91,7 +91,14 @@ func (s *UserService) UpdateUser(id string, input models.UpdateUserReq) (*models
 }
 
 func (s *UserService) UpdateUserStatus(id, status string) error {
-	return s.db.Model(&models.User{}).Where("id = ?", id).Update("status", status).Error
+	result := s.db.Model(&models.User{}).Where("id = ?", id).Update("status", status)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func (s *UserService) DeleteUser(id string) error {

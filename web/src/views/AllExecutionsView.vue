@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { Back, Refresh } from '@element-plus/icons-vue'
 import ExecutionLogTable from '../components/ExecutionLogTable.vue'
 import IconButton from '../components/IconButton.vue'
@@ -46,12 +47,21 @@ useAutoRefresh(() => load(true), 30000)
 
 // 兩條路由（/executions、/tasks/:id/executions）共用這個元件，切換時 id 會變但實例可能被重用，
 // 所以用 watch 而非只在 onMounted 抓資料
+let groupsRequested = false
+
 async function loadForId() {
   taskName.value = undefined
   if (props.id) {
-    getTask(props.id).then((t) => (taskName.value = t.name))
-  } else if (!groups.value.length) {
-    listAllTaskGroups().then((g) => (groups.value = g))
+    getTask(props.id).then((t) => (taskName.value = t.name)).catch(() => {})
+  } else if (!groupsRequested) {
+    // 先立旗標再發請求：快速切換路由時請求還沒回來，不會重複打；失敗則清掉旗標讓下次重試
+    groupsRequested = true
+    listAllTaskGroups()
+      .then((g) => (groups.value = g))
+      .catch((e: Error) => {
+        groupsRequested = false
+        ElMessage.error(e.message)
+      })
   }
   page.value = 1
   await load()

@@ -19,8 +19,13 @@ func failErr(c *gin.Context, err error, notFoundMsg, internalMsg string) {
 		response.Fail(c, http.StatusNotFound, notFoundMsg, nil)
 		return
 	}
+	failInternal(c, err, internalMsg)
+}
+
+// failInternal 非預期錯誤：記 log 後回 500，不把原始錯誤字串回給呼叫端（見 CLAUDE.md Response envelope）
+func failInternal(c *gin.Context, err error, msg string) {
 	logger.WithTrace(c).Error(err.Error())
-	response.Fail(c, http.StatusInternalServerError, internalMsg, nil)
+	response.Fail(c, http.StatusInternalServerError, msg, nil)
 }
 
 // bindJSON 綁定並驗證 JSON request body，成功回傳 true；失敗時記 Info log 並寫好 400 回應，呼叫端應立即 return
