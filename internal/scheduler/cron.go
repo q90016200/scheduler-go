@@ -123,7 +123,7 @@ func (cs *CronScheduler) reconcile() {
 		Order("created_at ASC").
 		Pluck("id", &ids).Error
 	if err != nil {
-		cs.Log.Error(err, "TaskServices.ListTasks err")
+		cs.Log.Error(err, "reconcile: pluck enabled task ids err")
 		return
 	}
 

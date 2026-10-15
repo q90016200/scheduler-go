@@ -149,6 +149,10 @@ func (ctrl *TaskController) RunTaskHandler(c *gin.Context) {
 			response.Fail(c, http.StatusConflict, "該任務已有執行中的批次", nil)
 			return
 		}
+		if errors.Is(err, scheduler.ErrTooManyBatches) {
+			response.Fail(c, http.StatusTooManyRequests, "同時執行中的批次過多，請稍後再試", nil)
+			return
+		}
 		log.Error(err.Error())
 		response.Fail(c, http.StatusInternalServerError, "執行任務失敗", nil)
 		return

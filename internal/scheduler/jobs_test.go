@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -162,6 +163,20 @@ func TestRunTaskNowRepeatsAndRejectsConcurrentBatch(t *testing.T) {
 	}
 	if err := CancelTaskRun(cs, task.ID); !errors.Is(err, ErrBatchNotFound) {
 		t.Fatalf("expected ErrBatchNotFound after batch finished, got %v", err)
+	}
+}
+
+func TestRunTaskNowRejectsOverGlobalLimit(t *testing.T) {
+	cs := newTestScheduler()
+	for i := range maxRunBatches {
+		cs.runBatches[fmt.Sprint("busy", i)] = runBatch{id: "x", cancel: func() {}}
+	}
+	task := &models.Task{ID: "over", Type: "http", Method: "GET", Endpoint: "http://example.invalid"}
+	if _, err := RunTaskNow(cs, task, 1, 100); !errors.Is(err, ErrTooManyBatches) {
+		t.Fatalf("expected ErrTooManyBatches, got %v", err)
+	}
+	if _, exists := cs.runBatches[task.ID]; exists {
+		t.Fatal("rejected batch must not be registered")
 	}
 }
 

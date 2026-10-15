@@ -130,6 +130,12 @@ func (cs *CronScheduler) registerTaskJobLocked(task *models.Task) error {
 // ErrBatchAlreadyRunning 同一任務同時只允許一個進行中的「立即執行」重複批次
 var ErrBatchAlreadyRunning = errors.New("task already has a running batch")
 
+// maxRunBatches 全站同時進行中的「立即執行」批次上限（跨任務加總），避免大量手動觸發把目標服務或本機打爆
+const maxRunBatches = 10
+
+// ErrTooManyBatches 全站進行中的「立即執行」批次已達 maxRunBatches
+var ErrTooManyBatches = errors.New("too many running batches")
+
 // ErrBatchNotFound CancelTaskRun 找不到該任務目前進行中的批次
 var ErrBatchNotFound = errors.New("no running batch for task")
 
@@ -181,6 +187,10 @@ func RunTaskNow(cs *CronScheduler, task *models.Task, repeat int, intervalMs int
 	if _, exists := cs.runBatches[task.ID]; exists {
 		cs.runBatchesMu.Unlock()
 		return "", ErrBatchAlreadyRunning
+	}
+	if len(cs.runBatches) >= maxRunBatches {
+		cs.runBatchesMu.Unlock()
+		return "", ErrTooManyBatches
 	}
 	ctx, cancel := context.WithCancel(cs.baseCtx)
 	cs.runBatches[task.ID] = runBatch{id: batchID, cancel: cancel}
