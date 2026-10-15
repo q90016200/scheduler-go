@@ -60,8 +60,7 @@ watch(
 )
 
 onMounted(async () => {
-  groups.value = await listAllTaskGroups()
-  notifyConfig.value = await getNotifyConfig()
+  ;[groups.value, notifyConfig.value] = await Promise.all([listAllTaskGroups(), getNotifyConfig()])
 })
 
 const rules: FormRules<TaskWriteDTO> = {

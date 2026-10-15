@@ -171,6 +171,7 @@ func (cs *CronScheduler) runnerFor(task *models.Task, source, batchID string) (f
 // 中途某次執行失敗不會中斷剩下的次數。同一任務同時只允許一個進行中的批次。
 // 手動觸發（source=manual）不計入 ConsecutiveFailures、也不會發失敗通知，避免使用者測試時誤觸發。
 func RunTaskNow(cs *CronScheduler, task *models.Task, repeat int, intervalMs int) (batchID string, err error) {
+	// runner 在鎖外解析：runBatchesMu 也被每秒輪詢的 IsBatchRunning 共用，鎖內只做快速判斷與 map 寫入
 	batchID = xid.New().String()
 	runOnce, err := cs.runnerFor(task, models.SOURCE_MANUAL, batchID)
 	if err != nil {
@@ -182,7 +183,7 @@ func RunTaskNow(cs *CronScheduler, task *models.Task, repeat int, intervalMs int
 	// 所以 batchWG.Add 一定發生在 Wait 之前
 	if cs.baseCtx.Err() != nil {
 		cs.runBatchesMu.Unlock()
-		return "", errSchedulerClosed
+		return "", ErrSchedulerClosed
 	}
 	if _, exists := cs.runBatches[task.ID]; exists {
 		cs.runBatchesMu.Unlock()
@@ -209,18 +210,17 @@ func RunTaskNow(cs *CronScheduler, task *models.Task, repeat int, intervalMs int
 			cs.runBatchesMu.Unlock()
 		}()
 		for i := 0; i < repeat; i++ {
+			if i > 0 {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(time.Duration(intervalMs) * time.Millisecond):
+				}
+			}
 			if ctx.Err() != nil {
 				return
 			}
 			runOnce(ctx)
-			if i == repeat-1 {
-				return
-			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(time.Duration(intervalMs) * time.Millisecond):
-			}
 		}
 	}()
 	return batchID, nil
@@ -235,7 +235,7 @@ func IsBatchRunning(cs *CronScheduler, taskID, batchID string) bool {
 	return exists && b.id == batchID
 }
 
-// CancelTaskRun 取消任務目前進行中的「立即執行」重複批次，只阻止尚未發出的下一次執行
+// CancelTaskRun 取消任務目前進行中的「立即執行」重複批次：取消批次 ctx，會中斷進行中的那次呼叫（含重試等待），剩下的次數也不再執行
 func CancelTaskRun(cs *CronScheduler, taskID string) error {
 	cs.runBatchesMu.Lock()
 	b, exists := cs.runBatches[taskID]
@@ -397,9 +397,9 @@ func (cs *CronScheduler) doHTTPAttempt(ctx context.Context, task *models.Task, h
 	return models.EXEC_STATUS_SUCCESS, string(resp.Body()), "", false
 }
 
-// errSchedulerClosed 排程器已 Stop 後不再建立新的 gRPC 連線（關機順序是先停 scheduler 再 srv.Shutdown，
-// 期間仍可能有 HTTP 請求觸發 RunTaskNow）
-var errSchedulerClosed = errors.New("scheduler closed")
+// ErrSchedulerClosed 排程器已 Stop：RunTaskNow 不再開新批次（controller 回 503），也不再建立新的 gRPC 連線
+// （關機順序是先停 scheduler 再 srv.Shutdown，期間仍可能有 HTTP 請求觸發 RunTaskNow）
+var ErrSchedulerClosed = errors.New("scheduler closed")
 
 // rpcConn 取得（或建立）endpoint 對應的快取 gRPC 連線。grpc.NewClient 是 lazy 且會自動重連，
 // 所以連線不會因暫時性錯誤被丟棄，快取的 conn 會自癒；只有 Stop 時才統一關閉。
@@ -410,7 +410,7 @@ func (cs *CronScheduler) rpcConn(endpoint string) (*grpc.ClientConn, error) {
 	defer cs.rpcMu.Unlock()
 
 	if cs.rpcClosed {
-		return nil, errSchedulerClosed
+		return nil, ErrSchedulerClosed
 	}
 	if conn, ok := cs.rpcConns[endpoint]; ok {
 		return conn, nil

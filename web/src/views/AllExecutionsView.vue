@@ -7,6 +7,7 @@ import IconButton from '../components/IconButton.vue'
 import { listExecutionLogs } from '../api/executionLogs'
 import { listAllTaskGroups } from '../api/taskGroups'
 import { getTask } from '../api/tasks'
+import { shortId } from '../utils/id'
 import { useAutoRefresh } from '../composables/useAutoRefresh'
 import { usePagedList } from '../composables/usePagedList'
 import type { ExecutionLog, ExecutionStatus, SortOrder, TaskGroup } from '../types'
@@ -50,7 +51,7 @@ async function loadForId() {
   if (props.id) {
     getTask(props.id).then((t) => (taskName.value = t.name))
   } else if (!groups.value.length) {
-    groups.value = await listAllTaskGroups()
+    listAllTaskGroups().then((g) => (groups.value = g))
   }
   page.value = 1
   await load()
@@ -67,7 +68,7 @@ watch(() => props.id, loadForId)
         <IconButton v-if="id" :icon="Back" label="返回" @click="router.back()" />
         <h1 v-if="id">{{ taskName ?? '任務' }} 的執行紀錄</h1>
         <h1 v-else>執行紀錄</h1>
-        <span v-if="id" class="mono muted" :title="id">#{{ id.slice(-6) }}</span>
+        <span v-if="id" class="mono muted" :title="id">{{ shortId(id) }}</span>
         <span v-else class="meta num">共 {{ total }} 筆</span>
       </div>
       <div v-if="id" class="toolbar">

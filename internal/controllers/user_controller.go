@@ -2,13 +2,13 @@ package controllers
 
 import (
 	"errors"
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/q90016200/scheduler-go/internal/app"
 	"github.com/q90016200/scheduler-go/internal/models"
-	"github.com/q90016200/scheduler-go/pkg/logger"
 	"github.com/q90016200/scheduler-go/pkg/response"
 	"gorm.io/gorm"
-	"net/http"
 )
 
 type UserController struct {
@@ -47,7 +47,6 @@ func (ctrl *UserController) GetUserHandler(c *gin.Context) {
 
 // CreateUserHandler 建立使用者
 func (ctrl *UserController) CreateUserHandler(c *gin.Context) {
-	log := logger.WithTrace(c)
 
 	var req models.CreateUserReq
 	if !bindJSON(c, &req) {
@@ -56,12 +55,11 @@ func (ctrl *UserController) CreateUserHandler(c *gin.Context) {
 
 	user, err := ctrl.services.UserService.CreateUser(req)
 	if err != nil {
-		log.Error(err.Error())
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			response.Fail(c, http.StatusConflict, "使用者名稱已存在", nil)
 			return
 		}
-		response.Fail(c, http.StatusInternalServerError, "建立使用者失敗", nil)
+		failErr(c, err, "使用者不存在", "建立使用者失敗")
 		return
 	}
 
@@ -87,7 +85,6 @@ func (ctrl *UserController) UpdateUserHandler(c *gin.Context) {
 
 // UpdateUserStatusHandler 切換使用者啟用/停用狀態
 func (ctrl *UserController) UpdateUserStatusHandler(c *gin.Context) {
-	log := logger.WithTrace(c)
 
 	var req models.UpdateUserStatusReq
 	if !bindJSON(c, &req) {
@@ -95,8 +92,7 @@ func (ctrl *UserController) UpdateUserStatusHandler(c *gin.Context) {
 	}
 
 	if err := ctrl.services.UserService.UpdateUserStatus(c.Param("id"), req.Status); err != nil {
-		log.Error(err.Error())
-		response.Fail(c, http.StatusInternalServerError, "更新使用者狀態失敗", nil)
+		failErr(c, err, "使用者不存在", "更新使用者狀態失敗")
 		return
 	}
 

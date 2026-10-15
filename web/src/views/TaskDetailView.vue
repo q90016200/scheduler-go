@@ -8,6 +8,7 @@ import RunTaskDialog from '../components/RunTaskDialog.vue'
 import TaskKind from '../components/TaskKind.vue'
 import { describeCron } from '../utils/cron'
 import { formatTime } from '../utils/time'
+import { shortId } from '../utils/id'
 import { getTask, getTaskStats } from '../api/tasks'
 import { useAutoRefresh } from '../composables/useAutoRefresh'
 import type { Task, TaskStats } from '../types'
@@ -34,7 +35,7 @@ useAutoRefresh(load, 30000)
       <div class="title">
         <IconButton :icon="Back" label="返回" @click="router.back()" />
         <h1>{{ task.name }}</h1>
-        <span class="mono muted" :title="task.id">#{{ task.id.slice(-6) }}</span>
+        <span class="mono muted" :title="task.id">{{ shortId(task.id) }}</span>
         <StatusTag :status="task.status" />
       </div>
       <div class="toolbar">

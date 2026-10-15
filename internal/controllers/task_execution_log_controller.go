@@ -3,9 +3,7 @@ package controllers
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/q90016200/scheduler-go/internal/app"
-	"github.com/q90016200/scheduler-go/pkg/logger"
 	"github.com/q90016200/scheduler-go/pkg/response"
-	"net/http"
 )
 
 type TaskExecutionLogController struct {
@@ -51,8 +49,7 @@ func (ctrl *TaskExecutionLogController) GetLogHandler(c *gin.Context) {
 func (ctrl *TaskExecutionLogController) GetTaskStatsHandler(c *gin.Context) {
 	stats, err := ctrl.services.TaskExecutionLogService.GetTaskStats(c.Param("id"))
 	if err != nil {
-		logger.WithTrace(c).Error(err.Error())
-		response.Fail(c, http.StatusInternalServerError, "取得任務統計失敗", nil)
+		failErr(c, err, "任務不存在", "取得任務統計失敗")
 		return
 	}
 
@@ -63,8 +60,7 @@ func (ctrl *TaskExecutionLogController) GetTaskStatsHandler(c *gin.Context) {
 func (ctrl *TaskExecutionLogController) GetDashboardStatsHandler(c *gin.Context) {
 	stats, err := ctrl.services.TaskExecutionLogService.GetDashboardStats()
 	if err != nil {
-		logger.WithTrace(c).Error(err.Error())
-		response.Fail(c, http.StatusInternalServerError, "取得儀表板統計失敗", nil)
+		failErr(c, err, "資料不存在", "取得儀表板統計失敗")
 		return
 	}
 

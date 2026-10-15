@@ -11,6 +11,7 @@ import TaskKind from '../components/TaskKind.vue'
 import StatusSwitch from '../components/StatusSwitch.vue'
 import { describeCron } from '../utils/cron'
 import { formatTime } from '../utils/time'
+import { shortId } from '../utils/id'
 import { createTask, deleteTask, listTasks, updateTask, updateTaskStatus } from '../api/tasks'
 import { listAllTaskGroups } from '../api/taskGroups'
 import { useAuthStore } from '../stores/auth'
@@ -200,7 +201,7 @@ async function handleSubmit(payload: TaskWriteDTO) {
       />
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="editingTask ? `編輯任務：${editingTask.name} #${editingTask.id.slice(-6)}` : '新增任務'" width="600px" append-to-body>
+    <el-dialog v-model="dialogVisible" :title="editingTask ? `編輯任務：${editingTask.name} ${shortId(editingTask.id)}` : '新增任務'" width="600px" append-to-body>
       <TaskForm v-if="dialogVisible" ref="formRef" :initial="editingTask" @submit="handleSubmit" />
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>

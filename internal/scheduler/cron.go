@@ -106,10 +106,10 @@ func NextRunAts(cs *CronScheduler, ids []string) map[string]time.Time {
 }
 
 // reconcile 每分鐘 poller 的本體：比對「DB 中 enabled 的任務」與「已註冊的 cron entry」，
-// 對差集（enabled 但未註冊、已註冊但不在 enabled 清單）逐筆 SyncTask。
+// 對差集（enabled 但未註冊、已註冊但不在 enabled 清單）呼叫一次 SyncTasks（一次鎖、一條 id IN 查詢）。
 // 已註冊 id 的快照在 cs.mu 內取、Pluck 在鎖外，兩者之間若有變動只會讓某筆被多／少同步一輪；
-// 真正的狀態判斷仍由 SyncTask 持鎖重讀 DB 決定，不信任這份快照，所以不會讓已停用的任務復活。
-// SyncTask 自己持鎖，因此必須在鎖外逐筆呼叫以免巢狀鎖。
+// 真正的狀態判斷仍由 SyncTasks 持鎖重讀 DB 決定，不信任這份快照，所以不會讓已停用的任務復活。
+// SyncTasks 自己持鎖，因此必須在鎖外呼叫以免巢狀鎖。
 func (cs *CronScheduler) reconcile() {
 	cs.mu.Lock()
 	registered := make(map[string]struct{}, len(cs.taskCronEntryIDs))
@@ -138,10 +138,8 @@ func (cs *CronScheduler) reconcile() {
 	for id := range registered {
 		diff = append(diff, id)
 	}
-	for _, id := range diff {
-		if err := SyncTask(cs, id); err != nil {
-			cs.Log.Error(err, "task ID: "+id+", poller SyncTask err")
-		}
+	if err := SyncTasks(cs, diff); err != nil {
+		cs.Log.Error(err, "poller SyncTasks err")
 	}
 }
 

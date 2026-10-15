@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { cancelRunTask, getRunBatch, runTask } from '../api/tasks'
 import ExecutionLogTable from './ExecutionLogTable.vue'
+import { shortId } from '../utils/id'
 import type { ExecutionLog, Task } from '../types'
 
 const props = defineProps<{ visible: boolean; task?: Task }>()
@@ -92,7 +93,7 @@ async function handleCancelBatch() {
   try {
     await cancelRunTask(props.task.id)
     // 不立刻標記完成：繼續輪詢到 running=false，被取消那次嘗試的紀錄才會出現
-    ElMessage.success('已送出取消，尚未開始的次數不會再執行')
+    ElMessage.success('已送出取消，進行中的呼叫會中斷、剩下的次數不再執行')
   } catch (err) {
     ElMessage.error((err as Error).message || '取消失敗')
   } finally {
@@ -102,7 +103,7 @@ async function handleCancelBatch() {
 </script>
 
 <template>
-  <el-dialog :model-value="visible" :title="task ? `立即執行：${task.name} #${task.id.slice(-6)}` : '立即執行'" width="600px" append-to-body @update:model-value="emit('update:visible', $event)">
+  <el-dialog :model-value="visible" :title="task ? `立即執行：${task.name} ${shortId(task.id)}` : '立即執行'" width="600px" append-to-body @update:model-value="emit('update:visible', $event)">
     <template v-if="stage === 'form'">
       <el-form label-width="100px">
         <el-form-item label="重複次數">
@@ -120,7 +121,7 @@ async function handleCancelBatch() {
 
     <template v-else>
       <el-progress :percentage="Math.min(100, Math.round((completedCount / form.repeat) * 100))" :status="finished ? 'success' : lostContact ? 'exception' : undefined" />
-      <el-alert v-if="lostContact" type="warning" :closable="false" style="margin-top: 12px" title="已連續 30 秒無法取得批次進度，停止更新。批次可能仍在後端執行，請稍後到執行紀錄查看。" />
+      <el-alert v-if="lostContact" type="warning" :closable="false" style="margin-top: 12px" :title="`已連續 ${MAX_POLL_FAILURES} 秒無法取得批次進度，停止更新。批次可能仍在後端執行，請稍後到執行紀錄查看。`" />
       <p style="margin: 12px 0">已收到 {{ completedCount }} / {{ form.repeat }} 筆執行結果</p>
       <ExecutionLogTable :logs="logs" :show-task="false" />
       <p style="color: var(--el-text-color-secondary); font-size: 13px; margin-top: 12px">關閉這個視窗不會停止尚未執行的次數，需按下方「取消批次」。</p>

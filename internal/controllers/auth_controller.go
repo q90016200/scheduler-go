@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"errors"
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/q90016200/scheduler-go/config"
 	"github.com/q90016200/scheduler-go/internal/app"
@@ -10,7 +12,6 @@ import (
 	"github.com/q90016200/scheduler-go/internal/services"
 	"github.com/q90016200/scheduler-go/pkg/response"
 	"gorm.io/gorm"
-	"net/http"
 )
 
 type AuthController struct {
@@ -26,8 +27,7 @@ func (ctrl *AuthController) RegisterHandler(c *gin.Context) {
 		UserName string `json:"user_name" binding:"required"`
 		Password string `json:"password" binding:"required"`
 	}
-	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Fail(c, http.StatusBadRequest, "請確認使用者名稱和密碼", err)
+	if !bindJSON(c, &input) {
 		return
 	}
 
@@ -37,7 +37,7 @@ func (ctrl *AuthController) RegisterHandler(c *gin.Context) {
 			response.Fail(c, http.StatusConflict, "用户名已存在", nil)
 			return
 		}
-		response.Fail(c, http.StatusInternalServerError, "註冊失敗", err)
+		failErr(c, err, "使用者不存在", "註冊失敗")
 		return
 	}
 
@@ -50,8 +50,7 @@ func (ctrl *AuthController) LoginHandler(c *gin.Context) {
 		Password string `json:"password" binding:"required"`
 	}
 
-	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Fail(c, http.StatusBadRequest, "請確認使用者名稱和密碼", err)
+	if !bindJSON(c, &input) {
 		return
 	}
 
@@ -61,13 +60,13 @@ func (ctrl *AuthController) LoginHandler(c *gin.Context) {
 			response.Fail(c, http.StatusUnauthorized, "帳號已停用", nil)
 			return
 		}
-		response.Fail(c, http.StatusUnauthorized, "使用者名稱或密碼錯誤", err)
+		response.Fail(c, http.StatusUnauthorized, "使用者名稱或密碼錯誤", nil)
 		return
 	}
 
 	token, err := auth.GenerateToken(user.ID)
 	if err != nil {
-		response.Fail(c, http.StatusInternalServerError, "無法生成 Token", err.Error())
+		failErr(c, err, "", "無法生成 Token")
 		return
 	}
 

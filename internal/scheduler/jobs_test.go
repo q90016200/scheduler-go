@@ -166,17 +166,51 @@ func TestRunTaskNowRepeatsAndRejectsConcurrentBatch(t *testing.T) {
 	}
 }
 
-func TestRunTaskNowRejectsOverGlobalLimit(t *testing.T) {
-	cs := newTestScheduler()
-	for i := range maxRunBatches {
+// fillBatches 塞 n 個佔位用的進行中批次，模擬全站名額被其他任務佔用
+func fillBatches(cs *CronScheduler, n int) {
+	for i := range n {
 		cs.runBatches[fmt.Sprint("busy", i)] = runBatch{id: "x", cancel: func() {}}
 	}
+}
+
+func TestRunTaskNowRejectsOverGlobalLimit(t *testing.T) {
+	cs := newTestScheduler()
+	fillBatches(cs, maxRunBatches)
 	task := &models.Task{ID: "over", Type: "http", Method: "GET", Endpoint: "http://example.invalid"}
 	if _, err := RunTaskNow(cs, task, 1, 100); !errors.Is(err, ErrTooManyBatches) {
 		t.Fatalf("expected ErrTooManyBatches, got %v", err)
 	}
 	if _, exists := cs.runBatches[task.ID]; exists {
 		t.Fatal("rejected batch must not be registered")
+	}
+
+	// 名額已滿且同任務也在跑時，409 優先於 429
+	cs.runBatches[task.ID] = runBatch{id: "x", cancel: func() {}}
+	if _, err := RunTaskNow(cs, task, 1, 100); !errors.Is(err, ErrBatchAlreadyRunning) {
+		t.Fatalf("expected ErrBatchAlreadyRunning before limit check, got %v", err)
+	}
+}
+
+func TestRunTaskNowReleasesSlotWhenDone(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+
+	cs := newTestScheduler()
+	fillBatches(cs, maxRunBatches-1)
+	first := &models.Task{ID: "slot1", Type: "http", Method: "GET", Endpoint: srv.URL}
+	batchID, err := RunTaskNow(cs, first, 1, 100)
+	if err != nil {
+		t.Fatalf("RunTaskNow returned error: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for IsBatchRunning(cs, first.ID, batchID) && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	// 名額若沒在批次結束時歸還，這裡會拿到 ErrTooManyBatches
+	second := &models.Task{ID: "slot2", Type: "http", Method: "GET", Endpoint: srv.URL}
+	if _, err := RunTaskNow(cs, second, 1, 100); err != nil {
+		t.Fatalf("expected slot to be released after batch finished, got %v", err)
 	}
 }
 

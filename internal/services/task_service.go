@@ -226,11 +226,12 @@ func (s *TaskService) UpdateTaskStatus(id, status, userId string) (*models.Task,
 
 // RunTaskNow 立即執行任務 repeat 次（間隔 intervalMs 毫秒），不受排程狀態影響，非同步執行後立刻回傳該批次的 batch id
 func (s *TaskService) RunTaskNow(id string, repeat, intervalMs int) (string, error) {
-	task, err := s.GetTask(id)
-	if err != nil {
+	// 不走 GetTask：執行只需要任務本身，不需要 Preload("Group") 與 NextRunAt 裝飾
+	var task models.Task
+	if err := s.db.First(&task, "id = ?", id).Error; err != nil {
 		return "", err
 	}
-	return scheduler.RunTaskNow(s.cronScheduler, task, repeat, intervalMs)
+	return scheduler.RunTaskNow(s.cronScheduler, &task, repeat, intervalMs)
 }
 
 // GetRunBatch 查詢「立即執行」批次的進度：running 表示批次是否仍在跑，logs 為該批次目前已寫入的紀錄（依開始時間升冪）。

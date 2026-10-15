@@ -2,6 +2,9 @@ package controllers
 
 import (
 	"errors"
+	"io"
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/q90016200/scheduler-go/internal/app"
 	"github.com/q90016200/scheduler-go/internal/models"
@@ -9,9 +12,6 @@ import (
 	"github.com/q90016200/scheduler-go/pkg/logger"
 	"github.com/q90016200/scheduler-go/pkg/response"
 	"github.com/q90016200/scheduler-go/pkg/utils"
-	"gorm.io/gorm"
-	"io"
-	"net/http"
 )
 
 type TaskController struct {
@@ -57,8 +57,6 @@ func (ctrl *TaskController) GetTaskHandler(c *gin.Context) {
 
 // CreateTaskHandler 建立任務
 func (ctrl *TaskController) CreateTaskHandler(c *gin.Context) {
-	// 獲取帶有 trace_id 的 logger
-	log := logger.WithTrace(c)
 
 	// 解析並綁定請求數據到 CreateTaskReq 結構體
 	var req models.CreateTaskReq
@@ -73,8 +71,7 @@ func (ctrl *TaskController) CreateTaskHandler(c *gin.Context) {
 
 	task, err := ctrl.services.TaskServices.CreateTask(req)
 	if err != nil {
-		log.Error(err.Error())
-		response.Fail(c, http.StatusInternalServerError, "建立任務失敗", nil)
+		failErr(c, err, "任務不存在", "建立任務失敗")
 		return
 	}
 
@@ -141,20 +138,19 @@ func (ctrl *TaskController) RunTaskHandler(c *gin.Context) {
 
 	batchID, err := ctrl.services.TaskServices.RunTaskNow(id, req.Repeat, req.IntervalMs)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, http.StatusNotFound, "任務不存在", nil)
-			return
-		}
 		if errors.Is(err, scheduler.ErrBatchAlreadyRunning) {
 			response.Fail(c, http.StatusConflict, "該任務已有執行中的批次", nil)
+			return
+		}
+		if errors.Is(err, scheduler.ErrSchedulerClosed) {
+			response.Fail(c, http.StatusServiceUnavailable, "服務正在關閉，請稍後再試", nil)
 			return
 		}
 		if errors.Is(err, scheduler.ErrTooManyBatches) {
 			response.Fail(c, http.StatusTooManyRequests, "同時執行中的批次過多，請稍後再試", nil)
 			return
 		}
-		log.Error(err.Error())
-		response.Fail(c, http.StatusInternalServerError, "執行任務失敗", nil)
+		failErr(c, err, "任務不存在", "執行任務失敗")
 		return
 	}
 
@@ -180,8 +176,7 @@ func (ctrl *TaskController) CancelTaskRunHandler(c *gin.Context) {
 			response.Fail(c, http.StatusNotFound, "找不到該任務進行中的批次", nil)
 			return
 		}
-		logger.WithTrace(c).Error(err.Error())
-		response.Fail(c, http.StatusInternalServerError, "取消執行失敗", nil)
+		failErr(c, err, "任務不存在", "取消執行失敗")
 		return
 	}
 
@@ -227,8 +222,6 @@ func (ctrl *TaskController) GetTaskGroupHandler(c *gin.Context) {
 
 // CreateTaskGroupHandler 建立任務群組
 func (ctrl *TaskController) CreateTaskGroupHandler(c *gin.Context) {
-	// 獲取帶有 trace_id 的 logger
-	log := logger.WithTrace(c)
 
 	// 解析並綁定請求數據到 CreateTaskGroupReq 結構體
 	var req models.CreateTaskGroupReq
@@ -243,8 +236,7 @@ func (ctrl *TaskController) CreateTaskGroupHandler(c *gin.Context) {
 
 	task, err := ctrl.services.TaskServices.CreateTaskGroup(req)
 	if err != nil {
-		log.Error(err.Error())
-		response.Fail(c, http.StatusInternalServerError, "建立任務群組失敗", nil)
+		failErr(c, err, "任務群組不存在", "建立任務群組失敗")
 		return
 	}
 
